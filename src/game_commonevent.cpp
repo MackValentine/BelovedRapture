@@ -23,6 +23,8 @@
 #include "main_data.h"
 #include <lcf/reader_util.h>
 #include <cassert>
+#include <game_maniacs.h>
+#include <output.h>
 
 Game_CommonEvent::Game_CommonEvent(int common_event_id) :
 	common_event_id(common_event_id)
@@ -36,6 +38,18 @@ Game_CommonEvent::Game_CommonEvent(int common_event_id) :
 	}
 
 
+}
+
+void Game_CommonEvent::ForceCreate(int ce_ID) {
+	auto* ce = lcf::ReaderUtil::GetElement(lcf::Data::commonevents, ce_ID);
+
+	if ((ce->trigger == lcf::rpg::EventPage::Trigger_parallel || ce->ID == ManiacsBattle::Get_ATBCE() || ce->ID == ManiacsBattle::Get_TargetCE() ||
+		ce->ID == ManiacsBattle::Get_DamageCE() || ce->ID == ManiacsBattle::Get_StateCE() || ce->ID == ManiacsBattle::Get_StatsCE())
+		&& !ce->event_commands.empty())
+	{
+		interpreter.reset(new Game_Interpreter_Map());
+		interpreter->Push(this);
+	}
 }
 
 void Game_CommonEvent::SetSaveData(const lcf::rpg::SaveEventExecState& data) {
@@ -58,6 +72,23 @@ AsyncOp Game_CommonEvent::Update(bool resume_async) {
 		if (interpreter->IsAsyncPending()) {
 			return interpreter->GetAsyncOp();
 		}
+	}
+
+	return {};
+}
+
+AsyncOp Game_CommonEvent::UpdateBattle(bool resume_async, int ce_ID) {
+	if (interpreter) {
+		assert(interpreter->IsRunning());
+		interpreter->Update(!resume_async);
+
+		// Suspend due to async op ...
+		if (interpreter->IsAsyncPending()) {
+			return interpreter->GetAsyncOp();
+		}
+	}
+	else {
+		Output::Warning("Common Event {} is empty or doesn't exist", ce_ID);
 	}
 
 	return {};

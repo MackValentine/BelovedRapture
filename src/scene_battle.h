@@ -123,10 +123,15 @@ public:
 	enum BattleOptionType {
 		Battle,
 		AutoBattle,
-		Escape
+		Escape,
+		Win,
+		Lose
 	};
 
 	static void SelectionFlash(Game_Battler* battler);
+
+	Window_Command* GetOptionsWindow();
+	void Scene_Battle::reset_easyrpg_battle_options(std::vector<int16_t> cmds);
 
 protected:
 	explicit Scene_Battle(const BattleArgs& args);
@@ -204,6 +209,10 @@ protected:
 
 inline bool Scene_Battle::IsEscapeAllowed() const {
 	return allow_escape;
+}
+
+inline Window_Command* Scene_Battle::GetOptionsWindow() {
+	return options_window.get();
 }
 
 #endif

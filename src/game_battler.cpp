@@ -43,6 +43,8 @@
 #include "attribute.h"
 #include "algo.h"
 #include "rand.h"
+#include <game_maniacs.h>
+#include <game_variables.h>
 
 Game_Battler::Game_Battler() {
 }
@@ -332,6 +334,31 @@ bool Game_Battler::AddState(int state_id, bool allow_battle_states) {
 		return was_added;
 	}
 
+	int CE_ID = ManiacsBattle::Get_StateCE();
+	int Var_ID = ManiacsBattle::Get_StateVar();
+	if (CE_ID > 0) {
+		int index = 0;
+		if (GetType() == Game_Battler::Type_Ally) {
+			Main_Data::game_variables->Set(Var_ID, 0);
+			index = Main_Data::game_party->GetActorPositionInParty(GetId());
+		}
+		else {
+			Main_Data::game_variables->Set(Var_ID, 1);
+			Game_Enemy* e = (Game_Enemy*)this;
+			index = Main_Data::game_enemyparty->GetEnemyPositionInParty(e);
+		}
+		Main_Data::game_variables->Set(Var_ID + 1, index);
+		Main_Data::game_variables->Set(Var_ID + 2, state_id);
+
+		Game_CommonEvent* ce = Game_Battle::StartCommonEventID(CE_ID);
+		ce->UpdateBattle(true, CE_ID);
+		Game_Battle::GetInterpreter().Clear();
+
+		int v = Var_ID + 2;
+		state_id = Main_Data::game_variables->Get(v);
+
+	}
+
 	if (state_id == lcf::rpg::State::kDeathID) {
 		SetAtbGauge(0);
 		SetHp(0);
@@ -497,6 +524,42 @@ bool Game_Battler::HasFullHp() const {
 
 int Game_Battler::ChangeSp(int sp) {
 	const auto prev_sp = GetSp();
+	if (sp > 0) {
+
+		int CE_ID = ManiacsBattle::Get_StatsCE();
+		int Var_ID = ManiacsBattle::Get_StatsVar();
+		if (CE_ID > 0) {
+
+
+			int index;
+			if (GetType() == Game_Battler::Type_Ally) {
+				Main_Data::game_variables->Set(Var_ID, 0);
+				index = Main_Data::game_party->GetActorPositionInParty(GetId());
+			}
+			else {
+				Main_Data::game_variables->Set(Var_ID, 1);
+				Game_Enemy* e = (Game_Enemy*)this;
+				index = Main_Data::game_enemyparty->GetEnemyPositionInParty(e);
+			}
+
+			Main_Data::game_variables->Set(Var_ID + 1, index);
+
+			Main_Data::game_variables->Set(Var_ID + 2, GetBattlePosition().x);
+			Main_Data::game_variables->Set(Var_ID + 3, GetBattlePosition().y);
+
+			Main_Data::game_variables->Set(Var_ID + 4, 3);
+			Main_Data::game_variables->Set(Var_ID + 5, sp);
+
+
+			Game_CommonEvent* ce = Game_Battle::StartCommonEventID(CE_ID);
+
+			ce->UpdateBattle(true, CE_ID);
+			Game_Battle::GetInterpreter().Clear();
+
+			sp = Main_Data::game_variables->Get(Var_ID + 5);
+
+		}
+	}
 	const auto new_sp = SetSp(prev_sp + sp);
 	return new_sp - prev_sp;
 }
@@ -739,24 +802,144 @@ int Game_Battler::CanChangeAgiModifier(int modifier) const {
 
 int Game_Battler::ChangeAtkModifier(int modifier) {
 	auto delta = CanChangeAtkModifier(modifier);
+	int CE_ID = ManiacsBattle::Get_StatsCE();
+	int Var_ID = ManiacsBattle::Get_StatsVar();
+	if (CE_ID > 0) {
+		int index;
+		if (GetType() == Game_Battler::Type_Ally) {
+			Main_Data::game_variables->Set(Var_ID, 0);
+			index = Main_Data::game_party->GetActorPositionInParty(GetId());
+		}
+		else {
+			Main_Data::game_variables->Set(Var_ID, 1);
+			Game_Enemy* e = (Game_Enemy*)this;
+			index = Main_Data::game_enemyparty->GetEnemyPositionInParty(e);
+		}
+
+		Main_Data::game_variables->Set(Var_ID + 1, index);
+
+		Main_Data::game_variables->Set(Var_ID + 2, GetBattlePosition().x);
+		Main_Data::game_variables->Set(Var_ID + 3, GetBattlePosition().y);
+
+		Main_Data::game_variables->Set(Var_ID + 4, 4);
+		Main_Data::game_variables->Set(Var_ID + 5, delta);
+
+
+		Game_CommonEvent* ce = Game_Battle::StartCommonEventID(CE_ID);
+		ce->UpdateBattle(true, CE_ID);
+		Game_Battle::GetInterpreter().Clear();
+
+		delta = Main_Data::game_variables->Get(Var_ID + 5);
+
+	}
 	SetAtkModifier(atk_modifier + delta);
 	return delta;
 }
 
 int Game_Battler::ChangeDefModifier(int modifier) {
 	auto delta = CanChangeDefModifier(modifier);
+	int CE_ID = ManiacsBattle::Get_StatsCE();
+	int Var_ID = ManiacsBattle::Get_StatsVar();
+	if (CE_ID > 0) {
+		int index;
+		if (GetType() == Game_Battler::Type_Ally) {
+			Main_Data::game_variables->Set(Var_ID, 0);
+			index = Main_Data::game_party->GetActorPositionInParty(GetId());
+		}
+		else {
+			Main_Data::game_variables->Set(Var_ID, 1);
+			Game_Enemy* e = (Game_Enemy*)this;
+			index = Main_Data::game_enemyparty->GetEnemyPositionInParty(e);
+		}
+
+		Main_Data::game_variables->Set(Var_ID + 1, index);
+
+		Main_Data::game_variables->Set(Var_ID + 2, GetBattlePosition().x);
+		Main_Data::game_variables->Set(Var_ID + 3, GetBattlePosition().y);
+
+		Main_Data::game_variables->Set(Var_ID + 4, 5);
+		Main_Data::game_variables->Set(Var_ID + 5, delta);
+
+
+		Game_CommonEvent* ce = Game_Battle::StartCommonEventID(CE_ID);
+		ce->UpdateBattle(true, CE_ID);
+		Game_Battle::GetInterpreter().Clear();
+
+		delta = Main_Data::game_variables->Get(Var_ID + 5);
+
+	}
 	SetDefModifier(def_modifier + delta);
 	return delta;
 }
 
 int Game_Battler::ChangeSpiModifier(int modifier) {
 	auto delta = CanChangeSpiModifier(modifier);
+	int CE_ID = ManiacsBattle::Get_StatsCE();
+	int Var_ID = ManiacsBattle::Get_StatsVar();
+	if (CE_ID > 0) {
+		int index;
+		if (GetType() == Game_Battler::Type_Ally) {
+			Main_Data::game_variables->Set(Var_ID, 0);
+			index = Main_Data::game_party->GetActorPositionInParty(GetId());
+		}
+		else {
+			Main_Data::game_variables->Set(Var_ID, 1);
+			Game_Enemy* e = (Game_Enemy*)this;
+			index = Main_Data::game_enemyparty->GetEnemyPositionInParty(e);
+		}
+
+		Main_Data::game_variables->Set(Var_ID + 1, index);
+
+		Main_Data::game_variables->Set(Var_ID + 2, GetBattlePosition().x);
+		Main_Data::game_variables->Set(Var_ID + 3, GetBattlePosition().y);
+
+		Main_Data::game_variables->Set(Var_ID + 4, 6);
+		Main_Data::game_variables->Set(Var_ID + 5, delta);
+
+
+		Game_CommonEvent* ce = Game_Battle::StartCommonEventID(CE_ID);
+		ce->UpdateBattle(true, CE_ID);
+		Game_Battle::GetInterpreter().Clear();
+
+		delta = Main_Data::game_variables->Get(Var_ID + 5);
+
+	}
 	SetSpiModifier(spi_modifier + delta);
 	return delta;
 }
 
 int Game_Battler::ChangeAgiModifier(int modifier) {
 	auto delta = CanChangeAgiModifier(modifier);
+	int CE_ID = ManiacsBattle::Get_StatsCE();
+	int Var_ID = ManiacsBattle::Get_StatsVar();
+	if (CE_ID > 0) {
+		int index;
+		if (GetType() == Game_Battler::Type_Ally) {
+			Main_Data::game_variables->Set(Var_ID, 0);
+			index = Main_Data::game_party->GetActorPositionInParty(GetId());
+		}
+		else {
+			Main_Data::game_variables->Set(Var_ID, 1);
+			Game_Enemy* e = (Game_Enemy*)this;
+			index = Main_Data::game_enemyparty->GetEnemyPositionInParty(e);
+		}
+
+		Main_Data::game_variables->Set(Var_ID + 1, index);
+
+		Main_Data::game_variables->Set(Var_ID + 2, GetBattlePosition().x);
+		Main_Data::game_variables->Set(Var_ID + 3, GetBattlePosition().y);
+
+		Main_Data::game_variables->Set(Var_ID + 4, 7);
+		Main_Data::game_variables->Set(Var_ID + 5, delta);
+
+
+		Game_CommonEvent* ce = Game_Battle::StartCommonEventID(CE_ID);
+		ce->UpdateBattle(true, CE_ID);
+		Game_Battle::GetInterpreter().Clear();
+
+		delta = Main_Data::game_variables->Get(Var_ID + 5);
+
+	}
 	SetAgiModifier(agi_modifier + delta);
 	return delta;
 }

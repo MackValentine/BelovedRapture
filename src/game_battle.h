@@ -25,6 +25,7 @@
 #include "teleport_target.h"
 #include "utils.h"
 #include "point.h"
+#include "game_commonevent.h"
 
 class Game_Battler;
 class Game_Enemy;
@@ -197,6 +198,12 @@ namespace Game_Battle {
 
 	/** Don't reference this, use IsBattleRunning()! */
 	extern bool battle_running;
+
+	/**
+	* Common Event in Battle
+	*/
+	void StartCommonEvent(int i);
+	Game_CommonEvent* StartCommonEventID(int id);
 }
 
 inline bool Game_Battle::IsBattleRunning() {

@@ -36,6 +36,8 @@
 #include "output.h"
 #include "utils.h"
 #include "rand.h"
+#include "game_map.h"
+#include <game_maniacs.h>
 
 namespace Game_Battle {
 	const lcf::rpg::Troop* troop = nullptr;
@@ -218,6 +220,31 @@ void Game_Battle::UpdateAtbGauges() {
 				const auto cur_atb = bat->GetAtbGauge();
 				const auto multiplier = std::max(1.0, static_cast<double>(275000 - cur_atb) / 55000.0);
 				increment = Utils::RoundTo<int>(multiplier * increment);
+				int CE_ID = ManiacsBattle::Get_ATBCE();
+				int Var_ID = ManiacsBattle::Get_ATBVar();
+				if (CE_ID > 0) {
+					if (bat->GetType() == Game_Battler::Type_Enemy) {
+
+						Main_Data::game_variables->Set(Var_ID, 1);
+						auto* enemy = static_cast<Game_Enemy*>(bat);
+						Main_Data::game_variables->Set(Var_ID + 1, enemy->GetTroopMemberId() - 1);
+
+					}
+					else {
+						Main_Data::game_variables->Set(Var_ID, 0);
+						Main_Data::game_variables->Set(Var_ID + 1, Main_Data::game_party->GetActorPositionInParty(bat->GetId()));
+					}
+
+					Main_Data::game_variables->Set(Var_ID + 2, cur_atb);
+					Main_Data::game_variables->Set(Var_ID + 3, increment);
+
+					Game_CommonEvent* ce = Game_Battle::StartCommonEventID(CE_ID);
+					ce->UpdateBattle(true, CE_ID);
+					Game_Battle::GetInterpreter().Clear();
+
+					increment = Main_Data::game_variables->Get(Var_ID + 3);
+
+				}
 			}
 			bat->IncrementAtbGauge(increment);
 		}
@@ -545,3 +572,28 @@ Point Game_Battle::Calculate2k3BattlePosition(const Game_Actor& actor) {
 	return position;
 }
 
+Game_CommonEvent* Game_Battle::StartCommonEventID(int id) {
+	Game_CommonEvent* ce = GetInterpreterBattle().StartCommonEvent(id);
+	ce->ForceCreate(id);
+	return ce;
+}
+
+void Game_Battle::StartCommonEvent(int type) {
+	//bool b = GetInterpreterBattle().StartCommonEvent(i);
+
+	for (int i = 1; i <= lcf::Data::commonevents.size(); i++) {
+
+		Game_CommonEvent* common_event = lcf::ReaderUtil::GetElement(Game_Map::GetCommonEvents(), i);
+
+		int trigger = common_event->GetTrigger();
+		//Output::Warning(std::to_string(trigger));
+
+		bool switch_on = true;
+		if (common_event->GetSwitchFlag())
+			switch_on = Main_Data::game_switches->Get(common_event->GetSwitchId());
+
+		if (trigger == type + 5 && switch_on)
+			bool b = GetInterpreterBattle().StartCommonEvent(i);
+	}
+
+}

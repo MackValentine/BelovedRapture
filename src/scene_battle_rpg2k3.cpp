@@ -49,6 +49,8 @@
 #include <algorithm>
 #include <memory>
 #include "feature.h"
+#include <game_maniacs.h>
+#include "game_variables.h"
 
 //#define EP_DEBUG_BATTLE2K3_STATE_MACHINE
 
@@ -959,6 +961,11 @@ void Scene_Battle_Rpg2k3::vUpdate() {
 			break;
 		}
 	}
+
+	if (!Game_Message::IsMessageActive()) {
+		Game_Battle::StartCommonEvent(2);
+	}
+
 
 	UpdateAnimations();
 	UpdateGraphics();
@@ -2189,7 +2196,35 @@ Scene_Battle_Rpg2k3::BattleActionReturn Scene_Battle_Rpg2k3::ProcessBattleAction
 		b->BattleStateHeal();
 		int damageTaken = b->ApplyConditions();
 		if (damageTaken != 0) {
-			DrawFloatText(
+			int CE_ID = ManiacsBattle::Get_DamageCE();
+			int Var_ID = ManiacsBattle::Get_DamageVar();
+			if (CE_ID > 0) {
+				Main_Data::game_variables->Set(Var_ID + 4, 0);
+				Main_Data::game_variables->Set(Var_ID + 5, 0);
+				if (b->GetType() == Game_Battler::Type_Enemy) {
+					Main_Data::game_variables->Set(Var_ID, 1);
+					auto* enemy = static_cast<Game_Enemy*>(b);
+					Main_Data::game_variables->Set(Var_ID + 1, enemy->GetTroopMemberId() - 1);
+				}
+				else {
+					Main_Data::game_variables->Set(Var_ID, 0);
+					Main_Data::game_variables->Set(Var_ID + 1, Main_Data::game_party->GetActorPositionInParty(b->GetId()));
+				}
+
+				Main_Data::game_variables->Set(Var_ID + 2, b->GetBattlePosition().x);
+				Main_Data::game_variables->Set(Var_ID + 3, b->GetBattlePosition().y);
+
+				Main_Data::game_variables->Set(Var_ID + 4, damageTaken < 0 ? 0 : 1);
+				Main_Data::game_variables->Set(Var_ID + 5, std::abs(damageTaken));
+
+				Main_Data::game_variables->Set(Var_ID + 6, 100);
+
+				auto ce = Game_Battle::StartCommonEventID(CE_ID);
+				ce->UpdateBattle(true, CE_ID);
+				Game_Battle::GetInterpreter().Clear();
+			}
+			else
+				DrawFloatText(
 					b->GetBattlePosition().x,
 					b->GetBattlePosition().y,
 					damageTaken < 0 ? Font::ColorDefault : Font::ColorHeal,
@@ -2581,7 +2616,8 @@ Scene_Battle_Rpg2k3::BattleActionReturn Scene_Battle_Rpg2k3::ProcessBattleAction
 		if (target->GetType() == Game_Battler::Type_Enemy) {
 			auto* enemy = static_cast<Game_Enemy*>(target);
 			enemy->SetBlinkTimer();
-		} else if (action->GetAffectedHp() < 0) {
+		}
+		else if (action->GetAffectedHp() < 0) {
 			if (!target->IsDead()) {
 				target_sprite->SetAnimationState(Sprite_Actor::AnimationState_Damage, Sprite_Actor::LoopState_DefaultAnimationAfterFinish);
 			}
@@ -2590,6 +2626,23 @@ Scene_Battle_Rpg2k3::BattleActionReturn Scene_Battle_Rpg2k3::ProcessBattleAction
 
 	if (!was_dead && target->GetType() == Game_Battler::Type_Ally && target->IsDead()) {
 		target_sprite->SetAnimationState(Sprite_Actor::AnimationState_Dead, Sprite_Actor::LoopState_WaitAfterFinish);
+	}
+
+	int CE_ID = ManiacsBattle::Get_DamageCE();
+	int Var_ID = ManiacsBattle::Get_DamageVar();
+	if (CE_ID > 0) {
+		Main_Data::game_variables->Set(Var_ID + 4, 0);
+		Main_Data::game_variables->Set(Var_ID + 5, 0);
+		if (target->GetType() == Game_Battler::Type_Enemy) {
+			Main_Data::game_variables->Set(Var_ID, 1);
+			auto* enemy = static_cast<Game_Enemy*>(target);
+			Main_Data::game_variables->Set(Var_ID + 1, enemy->GetTroopMemberId() - 1);
+		}
+		else {
+			Main_Data::game_variables->Set(Var_ID, 0);
+			Main_Data::game_variables->Set(Var_ID + 1, Main_Data::game_party->GetActorPositionInParty(target->GetId()));
+		}
+
 	}
 
 	if (action->IsSuccess() && target->GetType() == Game_Battler::Type_Enemy) {
@@ -2612,39 +2665,70 @@ Scene_Battle_Rpg2k3::BattleActionReturn Scene_Battle_Rpg2k3::ProcessBattleAction
 		if (action->IsAffectHp()) {
 			const auto hp = action->GetAffectedHp();
 			if (hp != 0 || (!action->IsPositive() && !action->IsAbsorbHp())) {
-				DrawFloatText(
+				if (CE_ID > 0) {
+					if (hp > 0)
+					{
+						Main_Data::game_variables->Set(Var_ID + 4, 1);
+						Main_Data::game_variables->Set(Var_ID + 5, std::abs(hp));
+					}
+					else
+					{
+						Main_Data::game_variables->Set(Var_ID + 4, 0);
+						Main_Data::game_variables->Set(Var_ID + 5, std::abs(hp));
+					}
+				}
+				else
+					DrawFloatText(
 						target->GetBattlePosition().x,
 						target->GetBattlePosition().y,
 						hp > 0 ? Font::ColorHeal : Font::ColorDefault,
 						std::to_string(std::abs(hp)));
 
-				if (action->IsAbsorbHp()) {
+				if (action->IsAbsorbHp() && CE_ID > 0) {
 					DrawFloatText(
-							source->GetBattlePosition().x,
-							source->GetBattlePosition().y,
-							hp > 0 ? Font::ColorDefault : Font::ColorHeal,
-							std::to_string(std::abs(hp)));
+						source->GetBattlePosition().x,
+						source->GetBattlePosition().y,
+						hp > 0 ? Font::ColorDefault : Font::ColorHeal,
+						std::to_string(std::abs(hp)));
 				}
 			}
 
 			if (!action->IsPositive() && !action->IsAbsorbHp()) {
 				if (target->GetType() == Game_Battler::Type_Ally) {
 					Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_AllyDamage));
-				} else {
+				}
+				else {
 					Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_EnemyDamage));
 				}
 			}
 		}
-	} else {
+	}
+	else {
 		auto* se = action->GetFailureSe();
 		if (se) {
 			Main_Data::game_system->SePlay(*se);
 		}
-		DrawFloatText(
+		if (CE_ID > 0) {
+			Main_Data::game_variables->Set(Var_ID + 4, 2);
+		}
+		else
+			DrawFloatText(
 				target->GetBattlePosition().x,
 				target->GetBattlePosition().y,
 				0,
 				lcf::Data::terms.miss);
+	}
+	if (CE_ID > 0) {
+		int x = target->GetBattlePosition().x;
+		int y = target->GetBattlePosition().y;
+
+		Main_Data::game_variables->Set(Var_ID + 2, x);
+		Main_Data::game_variables->Set(Var_ID + 3, y);
+
+		if ((action->IsAffectHp() || !action->IsSuccess())) {
+
+			Game_Battle::StartCommonEventID(CE_ID);
+		}
 	}
 
 	status_window->Refresh();

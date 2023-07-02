@@ -50,6 +50,8 @@
 #include "attribute.h"
 #include "spriteset_battle.h"
 #include "feature.h"
+#include <game_maniacs.h>
+#include <game_variables.h>
 
 static inline int MaxDamageValue() {
 	return lcf::Data::system.easyrpg_max_damage == -1 ? (Player::IsRPG2k() ? 999 : 9999) : lcf::Data::system.easyrpg_max_damage;
@@ -373,6 +375,122 @@ void Game_BattleAlgorithm::AlgorithmBase::Start() {
 	assert(current_target == targets.end() || IsCurrentTargetValid());
 
 	source->SetCharged(false);
+
+	int CE_ID = ManiacsBattle::Get_TargetCE();
+	int Var_ID = ManiacsBattle::Get_TargetVar();
+	if (CE_ID > 0) {
+		Main_Data::game_variables->Set(Var_ID + 1, 123);
+
+		Main_Data::game_variables->Set(Var_ID + 5, 123);
+
+		//Source Var
+		if (source->GetType() == Game_Battler::Type_Enemy) {
+			Main_Data::game_variables->Set(Var_ID, 1);
+			auto* enemy = static_cast<Game_Enemy*>(source);
+			Main_Data::game_variables->Set(Var_ID + 1, enemy->GetTroopMemberId() - 1);
+		}
+		else {
+			Main_Data::game_variables->Set(Var_ID, 0);
+			Main_Data::game_variables->Set(Var_ID + 1, Main_Data::game_party->GetActorPositionInParty(source->GetId()));
+		}
+
+		// Target Var
+		int size = std::distance(targets.begin(), targets.end());
+		if (size > 1) {
+			if (current_target[0]->GetType() != source->GetType()) {
+				Main_Data::game_variables->Set(Var_ID + 4, 1);
+				Main_Data::game_variables->Set(Var_ID + 5, 0);
+			}
+			else {
+				Main_Data::game_variables->Set(Var_ID + 4, 3);
+				Main_Data::game_variables->Set(Var_ID + 5, 0);
+			}
+		}
+		else {
+			if (current_target[0]->GetType() != source->GetType()) {
+				Main_Data::game_variables->Set(Var_ID + 4, 0);
+			}
+			else {
+				Main_Data::game_variables->Set(Var_ID + 4, 2);
+			}
+
+			if (current_target[0]->GetType() == Game_Battler::Type_Enemy) {
+				auto* enemy = static_cast<Game_Enemy*>(current_target[0]);
+				Main_Data::game_variables->Set(Var_ID + 5, enemy->GetTroopMemberId() - 1);
+			}
+			else {
+				Main_Data::game_variables->Set(Var_ID + 5, Main_Data::game_party->GetActorPositionInParty(current_target[0]->GetId()));
+			}
+		}
+
+		// Actions Var
+
+		Game_CommonEvent* ce = Game_Battle::StartCommonEventID(CE_ID);
+		ce->UpdateBattle(true, CE_ID);
+		Game_Battle::GetInterpreter().Clear();
+
+		int v = ManiacsBattle::Get_TargetVar() + 4;
+		int target_type = Main_Data::game_variables->Get(v);
+		v = ManiacsBattle::Get_TargetVar() + 5;
+		int target_index = Main_Data::game_variables->Get(v);
+
+		if (target_type == 0) {
+			// Single enemy
+			auto* target = GetOriginalTargets().back();
+			auto p = &target->GetParty();
+
+			std::vector<Game_Battler*> o;
+			p->GetBattlers(o);
+			AddTarget(o[target_index], true);
+		}
+		else if (target_type == 1) {
+			// All enemies
+
+			auto* target = GetTarget();
+
+			std::vector<Game_Battler*> o;
+			target->GetParty().GetBattlers(o);
+
+			int s = 0;
+			for (int i = 0; i < o.size(); i++) {
+				if (o[i]->CanAct() && !o[i]->IsHidden()) {
+					if (s == 0)
+						AddTarget(o[i], true);
+					else
+						AddTarget(o[i], false);
+					s++;
+				}
+			}
+
+			//AddTargets(&target->GetParty(), true);
+		}
+		else if (target_type == 2) {
+			// Single ally
+			auto p = &source->GetParty();
+
+			std::vector<Game_Battler*> o;
+			p->GetBattlers(o);
+			AddTarget(o[target_index], true);
+		}
+		else if (target_type == 3) {
+			// Allies
+
+			std::vector<Game_Battler*> o;
+			source->GetParty().GetBattlers(o);
+
+			int s = 0;
+			for (int i = 0; i < o.size(); i++) {
+				if (o[i]->CanAct() && !o[i]->IsHidden()) {
+					if (s == 0)
+						AddTarget(o[i], true);
+					else
+						AddTarget(o[i], false);
+					s++;
+				}
+			}
+		}
+
+	}
 }
 
 bool Game_BattleAlgorithm::AlgorithmBase::vStart() {
@@ -591,6 +709,13 @@ bool Game_BattleAlgorithm::Normal::vStart() {
 	}
 
 	source->ChangeSp(-source->CalculateWeaponSpCost(weapon));
+
+	int CE_ID = ManiacsBattle::Get_TargetCE();
+	int Var_ID = ManiacsBattle::Get_TargetVar();
+	if (CE_ID > 0) {
+		Main_Data::game_variables->Set(Var_ID + 2, 0);
+		Main_Data::game_variables->Set(Var_ID + 3, 0);
+	}
 
 	return true;
 }
@@ -860,6 +985,14 @@ bool Game_BattleAlgorithm::Skill::vStart() {
 		source->ChangeSp(-source->CalculateSkillCost(skill.ID));
 		source->ChangeHp(-source->CalculateSkillHpCost(skill.ID), false);
 	}
+
+	int CE_ID = ManiacsBattle::Get_TargetCE();
+	int Var_ID = ManiacsBattle::Get_TargetVar();
+	if (CE_ID > 0) {
+		Main_Data::game_variables->Set(Var_ID + 2, 1);
+		Main_Data::game_variables->Set(Var_ID + 3, skill.ID);
+	}
+
 	return true;
 }
 
@@ -1238,6 +1371,14 @@ Game_BattleAlgorithm::Item::Item(Game_Battler* source, Game_Party_Base* target, 
 
 bool Game_BattleAlgorithm::Item::vStart() {
 	Main_Data::game_party->ConsumeItemUse(item.ID);
+
+	int CE_ID = ManiacsBattle::Get_TargetCE();
+	int Var_ID = ManiacsBattle::Get_TargetVar();
+	if (CE_ID > 0) {
+		Main_Data::game_variables->Set(Var_ID + 2, 3);
+		Main_Data::game_variables->Set(Var_ID + 3, item.ID);
+	}
+
 	return true;
 }
 
@@ -1337,6 +1478,12 @@ bool Game_BattleAlgorithm::Item::ActionIsPossible() const {
 
 Game_BattleAlgorithm::Defend::Defend(Game_Battler* source) :
 	AlgorithmBase(Type::Defend, source, source) {
+		int CE_ID = ManiacsBattle::Get_TargetCE();
+		int Var_ID = ManiacsBattle::Get_TargetVar();
+		if (CE_ID > 0) {
+			Main_Data::game_variables->Set(Var_ID + 2, 0);
+			Main_Data::game_variables->Set(Var_ID + 3, 2);
+		}
 		source->SetIsDefending(true);
 }
 
@@ -1358,6 +1505,12 @@ int Game_BattleAlgorithm::Defend::GetSourcePose() const {
 Game_BattleAlgorithm::Observe::Observe(Game_Battler* source) :
 AlgorithmBase(Type::Observe, source, source) {
 	// no-op
+	int CE_ID = ManiacsBattle::Get_TargetCE();
+	int Var_ID = ManiacsBattle::Get_TargetVar();
+	if (CE_ID > 0) {
+		Main_Data::game_variables->Set(Var_ID + 2, 0);
+		Main_Data::game_variables->Set(Var_ID + 3, 3);
+	}
 }
 
 std::string Game_BattleAlgorithm::Observe::GetStartMessage(int line) const {
@@ -1374,6 +1527,12 @@ std::string Game_BattleAlgorithm::Observe::GetStartMessage(int line) const {
 Game_BattleAlgorithm::Charge::Charge(Game_Battler* source) :
 AlgorithmBase(Type::Charge, source, source) {
 	// no-op
+	int CE_ID = ManiacsBattle::Get_TargetCE();
+	int Var_ID = ManiacsBattle::Get_TargetVar();
+	if (CE_ID > 0) {
+		Main_Data::game_variables->Set(Var_ID + 2, 0);
+		Main_Data::game_variables->Set(Var_ID + 3, 4);
+	}
 }
 
 std::string Game_BattleAlgorithm::Charge::GetStartMessage(int line) const {
@@ -1394,6 +1553,12 @@ void Game_BattleAlgorithm::Charge::ApplyCustomEffect() {
 Game_BattleAlgorithm::SelfDestruct::SelfDestruct(Game_Battler* source, Game_Party_Base* target) :
 AlgorithmBase(Type::SelfDestruct, source, target) {
 	// no-op
+	int CE_ID = ManiacsBattle::Get_TargetCE();
+	int Var_ID = ManiacsBattle::Get_TargetVar();
+	if (CE_ID > 0) {
+		Main_Data::game_variables->Set(Var_ID + 2, 0);
+		Main_Data::game_variables->Set(Var_ID + 3, 5);
+	}
 }
 
 std::string Game_BattleAlgorithm::SelfDestruct::GetStartMessage(int line) const {
@@ -1448,6 +1613,12 @@ void Game_BattleAlgorithm::SelfDestruct::ApplyCustomEffect() {
 Game_BattleAlgorithm::Escape::Escape(Game_Battler* source) :
 	AlgorithmBase(Type::Escape, source, source) {
 	// no-op
+	int CE_ID = ManiacsBattle::Get_TargetCE();
+	int Var_ID = ManiacsBattle::Get_TargetVar();
+	if (CE_ID > 0) {
+		Main_Data::game_variables->Set(Var_ID + 2, 0);
+		Main_Data::game_variables->Set(Var_ID + 3, 6);
+	}
 }
 
 std::string Game_BattleAlgorithm::Escape::GetStartMessage(int line) const {
@@ -1485,6 +1656,12 @@ void Game_BattleAlgorithm::Escape::ApplyCustomEffect() {
 Game_BattleAlgorithm::Transform::Transform(Game_Battler* source, int new_monster_id) :
 AlgorithmBase(Type::Transform, source, source), new_monster_id(new_monster_id) {
 	// no-op
+	int CE_ID = ManiacsBattle::Get_TargetCE();
+	int Var_ID = ManiacsBattle::Get_TargetVar();
+	if (CE_ID > 0) {
+		Main_Data::game_variables->Set(Var_ID + 2, 2);
+		Main_Data::game_variables->Set(Var_ID + 3, new_monster_id);
+	}
 }
 
 std::string Game_BattleAlgorithm::Transform::GetStartMessage(int line) const {
@@ -1507,5 +1684,11 @@ void Game_BattleAlgorithm::Transform::ApplyCustomEffect() {
 Game_BattleAlgorithm::DoNothing::DoNothing(Game_Battler* source) :
 AlgorithmBase(Type::DoNothing, source, source) {
 	// no-op
+	int CE_ID = ManiacsBattle::Get_TargetCE();
+	int Var_ID = ManiacsBattle::Get_TargetVar();
+	if (CE_ID > 0) {
+		Main_Data::game_variables->Set(Var_ID + 2, 0);
+		Main_Data::game_variables->Set(Var_ID + 3, 7);
+	}
 }
 

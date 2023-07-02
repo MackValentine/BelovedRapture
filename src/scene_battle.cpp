@@ -136,6 +136,8 @@ void Scene_Battle::Start() {
 	InitEscapeChance();
 
 	SetState(State_Start);
+
+	Game_Battle::StartCommonEvent(1);
 }
 
 void Scene_Battle::InitEscapeChance() {
@@ -605,3 +607,40 @@ void Scene_Battle::EndBattle(BattleResult result) {
 	}
 }
 
+void Scene_Battle::reset_easyrpg_battle_options(std::vector<int16_t> cmds) {
+
+	lcf::Data::system.easyrpg_battle_options = cmds;
+
+	battle_options = {};
+
+	for (auto option : lcf::Data::system.easyrpg_battle_options) {
+		if (true) {
+			battle_options.push_back((BattleOptionType)option);
+		}
+	}
+
+
+	std::vector<std::string> commands;
+	// Add all menu items
+	for (auto option : battle_options) {
+		switch (option) {
+		case Battle:
+			commands.push_back(ToString(lcf::Data::terms.battle_fight));
+			break;
+		case AutoBattle:
+			commands.push_back(ToString(lcf::Data::terms.battle_auto));
+			break;
+		case Escape:
+			commands.push_back(ToString(lcf::Data::terms.battle_escape));
+			break;
+		case Win:
+			commands.push_back("Win");
+			break;
+		case Lose:
+			commands.push_back("Lose");
+			break;
+		}
+	}
+
+	options_window->ReplaceCommands(commands);
+}
