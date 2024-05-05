@@ -379,9 +379,9 @@ void Game_BattleAlgorithm::AlgorithmBase::Start() {
 	int CE_ID = ManiacsBattle::Get_TargetCE();
 	int Var_ID = ManiacsBattle::Get_TargetVar();
 	if (CE_ID > 0) {
-		Main_Data::game_variables->Set(Var_ID + 1, 123);
+		Main_Data::game_variables->Set(Var_ID + 1, 0);
 
-		Main_Data::game_variables->Set(Var_ID + 5, 123);
+		Main_Data::game_variables->Set(Var_ID + 5, 0);
 
 		//Source Var
 		if (source->GetType() == Game_Battler::Type_Enemy) {
@@ -396,6 +396,26 @@ void Game_BattleAlgorithm::AlgorithmBase::Start() {
 
 		// Target Var
 		int size = std::distance(targets.begin(), targets.end());
+		if (GetType() == Type::Normal) {
+
+			size = 1;
+
+			if (source->GetType() == Game_Battler::Type_Ally) {
+				auto* actor = static_cast<Game_Actor*>(source);
+				auto* normal = static_cast<Game_BattleAlgorithm::Normal*>(this);
+				if (normal->GetWeapon()) {
+					auto w = actor->GetWeapon();
+					if (normal->GetWeapon() == 2)
+						w = actor->Get2ndWeapon();
+					if (w)
+						if (w->attack_all) {
+							size = 2;
+						}
+				}
+			}
+
+		}
+
 		if (size > 1) {
 			if (current_target[0]->GetType() != source->GetType()) {
 				Main_Data::game_variables->Set(Var_ID + 4, 1);
