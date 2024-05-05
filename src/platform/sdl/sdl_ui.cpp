@@ -28,12 +28,12 @@
 #include "player.h"
 #include "bitmap.h"
 
-#ifdef GEKKO
-#  include "platform/wii/main.h"
-#endif
-
 #ifdef SUPPORT_AUDIO
-#  include "audio.h"
+#  ifdef __wii__
+#    include "platform/wii/audio.h"
+#  else
+#    include "sdl_audio.h"
+#  endif
 
 AudioInterface& SdlUi::GetAudio() {
 	return *audio_;
@@ -61,7 +61,7 @@ SdlUi::SdlUi(long width, long height, const Game_Config& cfg) : BaseUi(cfg)
 
 	// Set some SDL environment variables before starting. These are platform
 	// dependent, so every port needs to set them manually
-#ifndef GEKKO
+#ifndef __wii__
 	// Set window position to the middle of the screen
 	putenv(const_cast<char *>("SDL_VIDEO_WINDOW_POS=center"));
 #endif
@@ -79,25 +79,23 @@ SdlUi::SdlUi(long width, long height, const Game_Config& cfg) : BaseUi(cfg)
 	EndDisplayModeChange();
 
 	// Create the surface we draw on
-	DynamicFormat format;
-
-	if (Utils::IsBigEndian()) {
-		format = DynamicFormat(
-			32,
-			0x0000FF00,
-			0x00FF0000,
-			0xFF000000,
-			0x000000FF,
-			PF::NoAlpha);
-	} else {
-		format = DynamicFormat(
-			32,
-			0x00FF0000,
-			0x0000FF00,
-			0x000000FF,
-			0xFF000000,
-			PF::NoAlpha);
-	}
+#if defined(WORDS_BIGENDIAN)
+	DynamicFormat format = DynamicFormat(
+		32,
+		0x0000FF00,
+		0x00FF0000,
+		0xFF000000,
+		0x000000FF,
+		PF::NoAlpha);
+#else
+	DynamicFormat format = DynamicFormat(
+		32,
+		0x00FF0000,
+		0x0000FF00,
+		0x000000FF,
+		0xFF000000,
+		PF::NoAlpha);
+#endif
 
 	Bitmap::SetFormat(Bitmap::ChooseFormat(format));
 	main_surface = Bitmap::Create(
@@ -116,11 +114,6 @@ SdlUi::SdlUi(long width, long height, const Game_Config& cfg) : BaseUi(cfg)
 		format.g.mask,
 		format.b.mask,
 		format.a.mask);
-
-#ifdef GEKKO
-	// Eliminate debug spew in on-screen console
-	Wii::SetConsole();
-#endif
 
 	SetTitle(GAME_TITLE);
 
@@ -174,11 +167,13 @@ SdlUi::SdlUi(long width, long height, const Game_Config& cfg) : BaseUi(cfg)
 
 #ifdef SUPPORT_AUDIO
 	if (!Player::no_audio_flag) {
+#  ifdef __wii__
+		audio_ = std::make_unique<WiiAudio>(cfg.audio);
+#  else
 		audio_ = std::make_unique<SdlAudio>(cfg.audio);
+#  endif
 		return;
 	}
-#else
-	audio_ = std::make_unique<EmptyAudio>(cfg.audio);
 #endif
 }
 
@@ -353,7 +348,7 @@ bool SdlUi::RefreshDisplayMode() {
 
 	int bpp = current_display_mode.bpp;
 
-#ifdef GEKKO
+#ifdef __wii__
 	// force for SDL-wii, otherwise 16 bit is used
 	bpp = 24;
 #endif
@@ -444,15 +439,6 @@ bool SdlUi::ShowCursor(bool flag) {
 	cursor_visible = flag;
 	SDL_ShowCursor(flag ? SDL_ENABLE : SDL_DISABLE);
 	return temp_flag;
-}
-
-bool SdlUi::LogMessage(const std::string &message) {
-#ifdef GEKKO
-	return Wii::LogMessage(message);
-#else
-	// not logged
-	return false;
-#endif
 }
 
 void SdlUi::ProcessEvent(SDL_Event &evnt) {
@@ -754,7 +740,7 @@ int FilterUntilFocus(const SDL_Event* evnt) {
 }
 
 void SdlUi::vGetConfig(Game_ConfigVideo& cfg) const {
-#ifdef GEKKO
+#ifdef __wii__
 	cfg.renderer.Lock("SDL1 (Software, Wii)");
 #else
 	cfg.renderer.Lock("SDL1 (Software)");

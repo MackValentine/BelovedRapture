@@ -21,12 +21,13 @@
 #include <cstring>
 #include <csetjmp>
 #include <vector>
+#include <fstream>
 
 #include "output.h"
 #include "image_png.h"
 
 static void read_data(png_structp png_ptr, png_bytep data, png_size_t length) {
-    png_bytep* bufp = (png_bytep*) png_get_io_ptr(png_ptr);
+	png_bytep* bufp = (png_bytep*) png_get_io_ptr(png_ptr);
 	memcpy(data, *bufp, length);
 	*bufp += length;
 }
@@ -250,7 +251,7 @@ static void flush_stream(png_structp out_ptr) {
 	reinterpret_cast<Filesystem_Stream::OutputStream*>(png_get_io_ptr(out_ptr))->flush();
 }
 
-bool ImagePNG::WritePNG(Filesystem_Stream::OutputStream& os, uint32_t width, uint32_t height, uint32_t* data) {
+bool ImagePNG::WritePNG(std::ostream& os, uint32_t width, uint32_t height, uint32_t* data) {
 	png_structp write = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
 	if (!write) {
 		Output::Warning("Bitmap::WritePNG: error in png_create_write");

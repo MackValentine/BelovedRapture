@@ -19,6 +19,7 @@
 #include "cmdline_parser.h"
 #include "filefinder.h"
 #include "input_buttons.h"
+#include "keys.h"
 #include "output.h"
 #include "input.h"
 #include <lcf/inireader.h>
@@ -113,8 +114,10 @@ FilesystemView Game_Config::GetGlobalConfigFilesystem() {
 	std::string path;
 
 	if (config_path.empty()) {
-#ifdef GEKKO
-		path = "sd:/data/easyrpg-player";
+#ifdef __wii__
+		path = "/data/easyrpg-player";
+#elif defined(__WIIU__)
+		path = "/vol/external01/data/easyrpg-player"; // temp
 #elif defined(__SWITCH__)
 		path = "/switch/easyrpg-player";
 #elif defined(__3DS__)
@@ -240,12 +243,8 @@ void Game_Config::LoadFromArgs(CmdlineParser& cp) {
 		long li_value = 0;
 		std::string str_value;
 
-		if (cp.ParseNext(arg, 0, "--vsync")) {
-			video.vsync.Set(true);
-			continue;
-		}
-		if (cp.ParseNext(arg, 0, "--no-vsync")) {
-			video.vsync.Set(false);
+		if (cp.ParseNext(arg, 0, {"--vsync", "--no-vsync"})) {
+			video.vsync.Set(arg.ArgIsOn());
 			continue;
 		}
 		if (cp.ParseNext(arg, 1, "--fps-limit")) {
@@ -258,20 +257,12 @@ void Game_Config::LoadFromArgs(CmdlineParser& cp) {
 			video.fps_limit.Set(0);
 			continue;
 		}
-		if (cp.ParseNext(arg, 0, "--show-fps")) {
-			video.show_fps.Set(true);
+		if (cp.ParseNext(arg, 0, {"--show-fps", "--no-show-fps"})) {
+			video.show_fps.Set(arg.ArgIsOn());
 			continue;
 		}
-		if (cp.ParseNext(arg, 0, "--no-show-fps")) {
-			video.show_fps.Set(false);
-			continue;
-		}
-		if (cp.ParseNext(arg, 0, "--fps-render-window")) {
-			video.fps_render_window.Set(true);
-			continue;
-		}
-		if (cp.ParseNext(arg, 0, "--no-fps-render-window")) {
-			video.fps_render_window.Set(false);
+		if (cp.ParseNext(arg, 0, {"--fps-render-window", "--no-fps-render-window"})) {
+			video.fps_render_window.Set(arg.ArgIsOn());
 			continue;
 		}
 		if (cp.ParseNext(arg, 0, "--window")) {
@@ -288,12 +279,8 @@ void Game_Config::LoadFromArgs(CmdlineParser& cp) {
 			}
 			continue;
 		}
-		if (cp.ParseNext(arg, 0, "--stretch")) {
-			video.stretch.Set(true);
-			continue;
-		}
-		if (cp.ParseNext(arg, 0, "--no-stretch")) {
-			video.stretch.Set(false);
+		if (cp.ParseNext(arg, 0, {"--stretch", "--no-stretch"})) {
+			video.stretch.Set(arg.ArgIsOn());
 			continue;
 		}
 		if (cp.ParseNext(arg, 1, "--scaling")) {
@@ -377,7 +364,7 @@ void Game_Config::LoadFromStream(Filesystem_Stream::InputStream& is) {
 	for (int i = 0; i < Input::BUTTON_COUNT; ++i) {
 		auto button = static_cast<Input::InputButton>(i);
 
-		auto name = Input::kButtonNames.tag(button);
+		auto name = Input::kInputButtonNames.tag(button);
 		if (ini.HasValue("input", name)) {
 			auto values = ini.GetString("input", name, "");
 			mappings.RemoveAll(button);
@@ -390,9 +377,8 @@ void Game_Config::LoadFromStream(Filesystem_Stream::InputStream& is) {
 			if (Input::IsProtectedButton(button)) {
 				// Check for protected (important) buttons if they have more than zero mappings
 				for (const auto& key: keys) {
-					const auto& kNames = Input::Keys::kNames;
-					auto it = std::find(kNames.begin(), kNames.end(), key);
-					if (it != Input::Keys::kNames.end()) {
+					Input::Keys::InputKey k;
+					if (Input::Keys::kInputKeyNames.etag(key.c_str(), k)) {
 						has_mapping = true;
 						break;
 					}
@@ -406,10 +392,9 @@ void Game_Config::LoadFromStream(Filesystem_Stream::InputStream& is) {
 
 			// Load mappings from ini
 			for (const auto& key: keys) {
-				const auto& kNames = Input::Keys::kNames;
-				auto it = std::find(kNames.begin(), kNames.end(), key);
-				if (it != Input::Keys::kNames.end()) {
-					mappings.Add({button, static_cast<Input::Keys::InputKey>(std::distance(kNames.begin(), it))});
+				Input::Keys::InputKey k;
+				if (Input::Keys::kInputKeyNames.etag(key.c_str(), k)) {
+					mappings.Add({button, k});
 				}
 			}
 		}
@@ -418,11 +403,14 @@ void Game_Config::LoadFromStream(Filesystem_Stream::InputStream& is) {
 	input.gamepad_swap_analog.FromIni(ini);
 	input.gamepad_swap_dpad_with_buttons.FromIni(ini);
 	input.gamepad_swap_ab_and_xy.FromIni(ini);
+	input.speed_modifier_a.FromIni(ini);
+	input.speed_modifier_b.FromIni(ini);
 
 	/** PLAYER SECTION */
 	player.settings_autosave.FromIni(ini);
 	player.settings_in_title.FromIni(ini);
 	player.settings_in_menu.FromIni(ini);
+	player.show_startup_logos.FromIni(ini);
 }
 
 void Game_Config::WriteToStream(Filesystem_Stream::OutputStream& os) const {
@@ -463,7 +451,7 @@ void Game_Config::WriteToStream(Filesystem_Stream::OutputStream& os) const {
 	for (int i = 0; i < Input::BUTTON_COUNT; ++i) {
 		auto button = static_cast<Input::InputButton>(i);
 
-		auto name = Input::kButtonNames.tag(button);
+		auto name = Input::kInputButtonNames.tag(button);
 		os << name << "=";
 
 		std::stringstream ss;
@@ -475,7 +463,7 @@ void Game_Config::WriteToStream(Filesystem_Stream::OutputStream& os) const {
 			first = false;
 
 			auto key = static_cast<Input::Keys::InputKey>(ki->second);
-			auto kname = Input::Keys::kNames.tag(key);
+			auto kname = Input::Keys::kInputKeyNames.tag(key);
 			os << kname;
 		}
 
@@ -485,6 +473,8 @@ void Game_Config::WriteToStream(Filesystem_Stream::OutputStream& os) const {
 	input.gamepad_swap_analog.ToIni(os);
 	input.gamepad_swap_dpad_with_buttons.ToIni(os);
 	input.gamepad_swap_ab_and_xy.ToIni(os);
+	input.speed_modifier_a.ToIni(os);
+	input.speed_modifier_b.ToIni(os);
 
 	os << "\n";
 
@@ -496,6 +486,7 @@ void Game_Config::WriteToStream(Filesystem_Stream::OutputStream& os) const {
 	player.settings_autosave.ToIni(os);
 	player.settings_in_title.ToIni(os);
 	player.settings_in_menu.ToIni(os);
+	player.show_startup_logos.ToIni(os);
 
 	os << "\n";
 }

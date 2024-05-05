@@ -21,9 +21,8 @@
 #include <lcf/string_view.h>
 #include <lcf/dbstring.h>
 #include <fmt/core.h>
-
-// Needed to allow building with fmt 5, older versions are untested.
 #if FMT_VERSION < 60000
+// Remove after 0.8.1 in 2024: allow building with fmt 5
 #  include <fmt/ostream.h>
 #endif
 
@@ -39,7 +38,7 @@ using lcf::ToStringView;
 // FIXME: liblcf doesn't depend on fmt, so we need to add this here to enable fmtlib support for our StringView.
 #if FMT_VERSION >= EP_FMT_MODERN_VERSION
 template<>
-struct fmt::formatter<lcf::StringView> : fmt::formatter<fmt::string_view> {
+struct fmt::formatter<lcf::StringView> : formatter<string_view> {
 	auto format(const lcf::StringView& s, format_context& ctx) const -> decltype(ctx.out());
 };
 

@@ -130,7 +130,11 @@ void Scene_Title::TransitionIn(SceneType prev_scene) {
 	Transition::instance().InitShow(Transition::TransitionFadeIn, this);
 }
 
-void Scene_Title::Suspend(Scene::SceneType) {
+void Scene_Title::Suspend(Scene::SceneType scene_type) {
+	if (scene_type == Scene::Settings) {
+		restart_title_cache = true;
+	}
+
 	// Unload title graphic to save memory
 	title.reset();
 }
@@ -175,6 +179,12 @@ void Scene_Title::vUpdate() {
 			int index = translate_window->GetIndex();
 			ChangeLanguage(lang_dirs.at(index));
 		}
+	} else if (Input::IsTriggered(Input::SHIFT)) {
+		// For emscripten: Allow accessing the load scene for file upload with Shift
+		int index = command_window->GetIndex();
+		if (index == indices.continue_game) {
+			CommandContinue();
+		}
 	} else if (Input::IsTriggered(Input::CANCEL)) {
 		if (active_window == 1) {
 			// Switch back
@@ -182,6 +192,15 @@ void Scene_Title::vUpdate() {
 			HideTranslationWindow();
 		}
 	}
+}
+
+void Scene_Title::Refresh() {
+	// Enable load game if available
+	continue_enabled = FileFinder::HasSavegame();
+	if (continue_enabled) {
+		command_window->SetIndex(1);
+	}
+	command_window->SetItemEnabled(1, continue_enabled);
 }
 
 void Scene_Title::OnTranslationChanged() {
@@ -253,12 +272,7 @@ void Scene_Title::CreateCommandWindow() {
 	command_window.reset(new Window_Command(options));
 	RepositionWindow(*command_window, Player::hide_title_flag);
 
-	// Enable load game if available
-	continue_enabled = FileFinder::HasSavegame();
-	if (continue_enabled) {
-		command_window->SetIndex(1);
-	}
-	command_window->SetItemEnabled(1, continue_enabled);
+	Refresh();
 
 	// Set the number of frames for the opening animation to last
 	if (!Player::hide_title_flag) {
@@ -345,7 +359,7 @@ void Scene_Title::CommandNewGame() {
 }
 
 void Scene_Title::CommandContinue() {
-	if (continue_enabled) {
+	if (continue_enabled || Input::IsTriggered(Input::SHIFT)) {
 		Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Decision));
 	} else {
 		Main_Data::game_system->SePlay(Main_Data::game_system->GetSystemSE(Main_Data::game_system->SFX_Buzzer));

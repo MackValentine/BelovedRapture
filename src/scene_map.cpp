@@ -96,6 +96,11 @@ void Scene_Map::Start() {
 	Start2(MapUpdateAsyncContext());
 }
 
+void Scene_Map::StartFromSave(int from_save_id) {
+	this->from_save_id = from_save_id;
+	Start();
+}
+
 void Scene_Map::Start2(MapUpdateAsyncContext actx) {
 	PreUpdate(actx);
 
@@ -226,7 +231,6 @@ void Scene_Map::OnTranslationChanged() {
 	// FIXME: Map events are not reloaded
 	// They require leaving and reentering the map
 	Scene::OnTranslationChanged();
-	Game_Map::OnTranslationChanged();
 }
 
 void Scene_Map::PreUpdate(MapUpdateAsyncContext& actx) {
@@ -244,6 +248,7 @@ void Scene_Map::vUpdate() {
 		UpdateInn();
 		return;
 	}
+
 	MapUpdateAsyncContext actx;
 	UpdateStage1(actx);
 }

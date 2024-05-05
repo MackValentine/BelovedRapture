@@ -86,10 +86,7 @@ void Game_Interpreter_Map::OnMapChange() {
 /**
  * Execute Command.
  */
-bool Game_Interpreter_Map::ExecuteCommand() {
-	auto& frame = GetFrame();
-	const auto& com = frame.commands[frame.current_command];
-
+bool Game_Interpreter_Map::ExecuteCommand(lcf::rpg::EventCommand const& com) {
 	switch (static_cast<Cmd>(com.code)) {
 		case Cmd::RecallToLocation:
 			return CommandRecallToLocation(com);
@@ -145,8 +142,10 @@ bool Game_Interpreter_Map::ExecuteCommand() {
 			return CommandOpenLoadMenu(com);
 		case Cmd::ToggleAtbMode:
 			return CommandToggleAtbMode(com);
+		case static_cast <Game_Interpreter::Cmd>(2002): // Cmd::EasyRpg_TriggerEventAt
+			return CommandEasyRpgTriggerEventAt(com);
 		default:
-			return Game_Interpreter::ExecuteCommand();
+			return Game_Interpreter::ExecuteCommand(com);
 	}
 }
 
@@ -365,7 +364,7 @@ bool Game_Interpreter_Map::CommandShowInn(lcf::rpg::EventCommand const& com) { /
 		return false;
 	}
 
-	auto pm = PendingMessage();
+	PendingMessage pm(Game_Message::CommandCodeInserter);
 
 	StringView greeting_1, greeting_2, greeting_3, accept, cancel;
 
@@ -675,5 +674,14 @@ bool Game_Interpreter_Map::CommandToggleAtbMode(lcf::rpg::EventCommand const& /*
 	}
 
 	Main_Data::game_system->ToggleAtbMode();
+	return true;
+}
+
+bool Game_Interpreter_Map::CommandEasyRpgTriggerEventAt(lcf::rpg::EventCommand const& com) {
+	int x = ValueOrVariable(com.parameters[0], com.parameters[1]);
+	int y = ValueOrVariable(com.parameters[2], com.parameters[3]);
+
+	Main_Data::game_player->TriggerEventAt(x, y);
+
 	return true;
 }

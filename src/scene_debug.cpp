@@ -401,6 +401,15 @@ void Scene_Debug::vUpdate() {
 					PushUiVarList();
 				}
 				break;
+			case eMoveSpeed:
+				if (sz > 1) {
+					DoMoveSpeed();
+				} else {
+					PushUiNumberInput(Main_Data::game_player->GetMoveSpeed(), 1, false);
+					range_index = 0;
+					range_window->SetIndex(range_index);
+				}
+				break;
 			case eCallCommonEvent:
 				if (sz > 2) {
 					DoCallCommonEvent();
@@ -508,8 +517,9 @@ void Scene_Debug::UpdateRangeListWindow() {
 				addItem("Full Heal");
 				addItem("Level");
 			} else {
+				addItem("Move Speed", !is_battle);
 				addItem("Call ComEvent");
-				addItem("Call MapEvent", !is_battle);
+				addItem("Call MapEvent", Scene::Find(Scene::Map) != nullptr);
 				addItem("Call BtlEvent", is_battle);
 				addItem("Open Menu", !is_battle);
 			}
@@ -571,6 +581,10 @@ void Scene_Debug::UpdateRangeListWindow() {
 			break;
 		case eLevel:
 			addItem("Level");
+			break;
+		case eMoveSpeed:
+			addItem("Move Speed");
+			addItem("Range: 1-7");
 			break;
 		case eCallBattleEvent:
 			if (is_battle) {
@@ -772,6 +786,12 @@ void Scene_Debug::DoLevel() {
 	Pop();
 }
 
+void Scene_Debug::DoMoveSpeed() {
+	Main_Data::game_player->SetMoveSpeed(Utils::Clamp<int>(GetFrame().value, 1, 7));
+
+	Pop();
+}
+
 void Scene_Debug::DoCallCommonEvent() {
 	const auto ceid = GetFrame(0).value;
 
@@ -793,7 +813,7 @@ void Scene_Debug::DoCallCommonEvent() {
 }
 
 void Scene_Debug::DoCallMapEvent() {
-	if (Game_Battle::IsBattleRunning()) {
+	if (!Scene::Find(Scene::Map)) {
 		return;
 	}
 
@@ -810,9 +830,15 @@ void Scene_Debug::DoCallMapEvent() {
 		return;
 	}
 
-	Game_Map::GetInterpreter().Push(me, page, false);
-	Scene::PopUntil(Scene::Map);
-	Output::Debug("Debug Scene Forced execution of map event {} page {} on the map foreground interpreter.", me->GetId(), page->ID);
+	if (Game_Battle::IsBattleRunning()) {
+		Game_Battle::GetInterpreter().Push(me, page, false);
+		Scene::PopUntil(Scene::Battle);
+		Output::Debug("Debug Scene Forced execution of map event {} page {} on the battle foreground interpreter.", me->GetId(), page->ID);
+	} else {
+		Game_Map::GetInterpreter().Push(me, page, false);
+		Scene::PopUntil(Scene::Map);
+		Output::Debug("Debug Scene Forced execution of map event {} page {} on the map foreground interpreter.", me->GetId(), page->ID);
+	}
 }
 
 void Scene_Debug::DoCallBattleEvent() {

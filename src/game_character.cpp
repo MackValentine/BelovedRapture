@@ -33,6 +33,7 @@
 #include "rand.h"
 #include <cmath>
 #include <cassert>
+#include <unordered_set>
 
 Game_Character::Game_Character(Type type, lcf::rpg::SaveMapEventBase* d) :
 	_type(type), _data(d)
@@ -74,12 +75,12 @@ int Game_Character::GetScreenX(bool apply_shift) const {
 	int x = GetSpriteX() / TILE_SIZE - Game_Map::GetDisplayX() / TILE_SIZE + TILE_SIZE;
 
 	if (Game_Map::LoopHorizontal()) {
-		x = Utils::PositiveModulo(x, Game_Map::GetWidth() * TILE_SIZE);
+		x = Utils::PositiveModulo(x, Game_Map::GetTilesX() * TILE_SIZE);
 	}
 	x -= TILE_SIZE / 2;
 
 	if (apply_shift) {
-		x += Game_Map::GetWidth() * TILE_SIZE;
+		x += Game_Map::GetTilesX() * TILE_SIZE;
 	}
 
 	return x;
@@ -93,11 +94,11 @@ int Game_Character::GetScreenY(bool apply_shift, bool apply_jump) const {
 	}
 
 	if (Game_Map::LoopVertical()) {
-		y = Utils::PositiveModulo(y, Game_Map::GetHeight() * TILE_SIZE);
+		y = Utils::PositiveModulo(y, Game_Map::GetTilesY() * TILE_SIZE);
 	}
 
 	if (apply_shift) {
-		y += Game_Map::GetHeight() * TILE_SIZE;
+		y += Game_Map::GetTilesY() * TILE_SIZE;
 	}
 
 	return y;
@@ -469,6 +470,20 @@ bool Game_Character::MakeWay(int from_x, int from_y, int to_x, int to_y) {
 	return Game_Map::MakeWay(*this, from_x, from_y, to_x, to_y);
 }
 
+
+bool Game_Character::CheckWay(int from_x, int from_y, int to_x, int to_y) {
+	return Game_Map::CheckWay(*this, from_x, from_y, to_x, to_y);
+}
+
+
+bool Game_Character::CheckWay(
+		int from_x, int from_y, int to_x, int to_y, bool ignore_all_events,
+		std::unordered_set<int> *ignore_some_events_by_id) {
+	return Game_Map::CheckWay(*this, from_x, from_y, to_x, to_y,
+		ignore_all_events, ignore_some_events_by_id);
+}
+
+
 bool Game_Character::Move(int dir) {
 	if (!IsStopping()) {
 		return true;
@@ -699,7 +714,7 @@ bool Game_Character::Jump(int x, int y) {
 	// Adjust positions for looping maps. jump begin positions
 	// get set off the edge of the map to preserve direction.
 	if (Game_Map::LoopHorizontal()
-			&& (x < 0 || x >= Game_Map::GetWidth()))
+			&& (x < 0 || x >= Game_Map::GetTilesX()))
 	{
 		const auto old_x = x;
 		x = Game_Map::RoundX(x);
@@ -707,7 +722,7 @@ bool Game_Character::Jump(int x, int y) {
 	}
 
 	if (Game_Map::LoopVertical()
-			&& (y < 0 || y >= Game_Map::GetHeight()))
+			&& (y < 0 || y >= Game_Map::GetTilesY()))
 	{
 		auto old_y = y;
 		y = Game_Map::RoundY(y);
@@ -727,11 +742,11 @@ bool Game_Character::Jump(int x, int y) {
 int Game_Character::DistanceXfromPlayer() const {
 	int sx = GetX() - Main_Data::game_player->GetX();
 	if (Game_Map::LoopHorizontal()) {
-		if (std::abs(sx) > Game_Map::GetWidth() / 2) {
+		if (std::abs(sx) > Game_Map::GetTilesX() / 2) {
 			if (sx > 0)
-				sx -= Game_Map::GetWidth();
+				sx -= Game_Map::GetTilesX();
 			else
-				sx += Game_Map::GetWidth();
+				sx += Game_Map::GetTilesX();
 		}
 	}
 	return sx;
@@ -740,11 +755,11 @@ int Game_Character::DistanceXfromPlayer() const {
 int Game_Character::DistanceYfromPlayer() const {
 	int sy = GetY() - Main_Data::game_player->GetY();
 	if (Game_Map::LoopVertical()) {
-		if (std::abs(sy) > Game_Map::GetHeight() / 2) {
+		if (std::abs(sy) > Game_Map::GetTilesY() / 2) {
 			if (sy > 0)
-				sy -= Game_Map::GetHeight();
+				sy -= Game_Map::GetTilesY();
 			else
-				sy += Game_Map::GetHeight();
+				sy += Game_Map::GetTilesY();
 		}
 	}
 	return sy;

@@ -21,7 +21,6 @@
 #include <iterator>
 #include "game_actor.h"
 #include "game_battle.h"
-#include "game_message.h"
 #include "game_party.h"
 #include "sprite_actor.h"
 #include "main_data.h"
@@ -32,7 +31,6 @@
 #include "util_macro.h"
 #include "utils.h"
 #include "pending_message.h"
-#include "compiler.h"
 #include "attribute.h"
 #include "rand.h"
 #include "algo.h"
@@ -293,7 +291,12 @@ int Game_Actor::LearnLevelSkills(int min_level, int max_level, PendingMessage* p
 	for (const lcf::rpg::Learning& learn : skills) {
 		// Skill learning, up to current level
 		if (learn.level >= min_level && learn.level <= max_level) {
-			count += LearnSkill(learn.skill_id, pm);
+			const auto* skill = lcf::ReaderUtil::GetElement(lcf::Data::skills, learn.skill_id);
+			if (!skill) {
+				Output::Debug("Actor {}: Level up (level={}). Ignoring invalid skill {}", GetId(), learn.level, learn.skill_id);
+			} else {
+				count += LearnSkill(learn.skill_id, pm);
+			}
 		}
 	}
 	return count;
@@ -352,6 +355,10 @@ int Game_Actor::SetEquipment(int equip_type, int new_item_id) {
 }
 
 void Game_Actor::ChangeEquipment(int equip_type, int item_id) {
+	if (item_id != 0 && !IsItemUsable(item_id)) {
+		return;
+	}
+
 	int prev_item = SetEquipment(equip_type, item_id);
 
 	if (prev_item != 0) {
@@ -390,7 +397,9 @@ void Game_Actor::RemoveWholeEquipment() {
 int Game_Actor::GetItemCount(int item_id) {
 	int number = 0;
 
-	if (item_id > 0) {
+	// quirk: 0 is "no item in slot"
+	// This can be used to count how many slots are empty
+	if (item_id >= 0) {
 		for (int16_t i : GetWholeEquipment()) {
 			if (item_id == i) {
 				++number;
@@ -1136,10 +1145,10 @@ void Game_Actor::ChangeClass(int new_class_id,
 }
 
 StringView Game_Actor::GetClassName() const {
-    if (!GetClass()) {
-        return {};
-    }
-    return GetClass()->name;
+	if (!GetClass()) {
+		return {};
+	}
+	return GetClass()->name;
 }
 
 static int ClampMaxHpMod(int hp, const Game_Actor* actor) {

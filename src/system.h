@@ -63,11 +63,14 @@
 #elif defined(__vita__)
 #  define SUPPORT_JOYSTICK
 #  define SUPPORT_JOYSTICK_AXIS
-#elif defined(GEKKO)
+#elif defined(__wii__)
 #  include <cstdint>
-#  define WORDS_BIGENDIAN
 #  define SUPPORT_JOYSTICK
 #  define SUPPORT_JOYSTICK_AXIS
+#elif defined(__WIIU__)
+#  define SUPPORT_JOYSTICK
+#  define SUPPORT_JOYSTICK_AXIS
+#  define SUPPORT_TOUCH
 #elif defined(_WIN32)
 #  define SUPPORT_ZOOM
 #  define SUPPORT_MOUSE
@@ -80,7 +83,6 @@
 #elif defined(PLAYER_AMIGA) && !defined(__AROS__)
 #  define SUPPORT_ZOOM
 #  define SUPPORT_MOUSE
-#  define WORDS_BIGENDIAN
 #  define SUPPORT_JOYSTICK
 #  define SUPPORT_JOYSTICK_AXIS
 #else // Everything not catched above, e.g. Linux/*BSD/macOS

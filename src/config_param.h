@@ -210,11 +210,11 @@ public:
 	}
 
 	template <typename U = T, typename std::enable_if<!std::is_enum<U>::value, int>::type = 0>
-    void ToIni(std::ostream& ini) const {
+	void ToIni(std::ostream& ini) const {
 		if (IsOptionVisible()) {
-    		ini << _config_key << '=' << Get() << "\n";
+			ini << _config_key << '=' << Get() << "\n";
 		}
-    }
+	}
 
 protected:
 	virtual bool vIsValid(const T& value) const = 0;
@@ -250,7 +250,7 @@ public:
 template <typename T>
 class LockedConfigParam final : public ConfigParam<T> {
 public:
-    explicit LockedConfigParam(StringView name, StringView description, T value = {}) :
+	explicit LockedConfigParam(StringView name, StringView description, T value = {}) :
 		ConfigParam<T>(name, description, "", "", value) {
 		this->Lock(value);
 	}
@@ -356,7 +356,7 @@ public:
 	EnumConfigParam(StringView name, StringView description, StringView config_section, StringView config_key, E value, std::array<StringView, S> values, std::array<StringView, S> tags, std::array<StringView, S> value_descriptions) :
 		ConfigParamBase<E>(name, description, config_section, config_key, value), _values{ values }, _tags{ tags}, _value_descriptions{ value_descriptions } {
 		for (size_t i = 0; i < S; ++i) {
-			_valid[static_cast<E>(S)] = true;
+			_valid[static_cast<E>(i)] = true;
 		}
 	}
 
@@ -420,12 +420,12 @@ public:
 
 	void ToIni(std::ostream& ini) const {
 		if (this->IsOptionVisible()) {
-    		ini << this->_config_key << '=' << _tags[static_cast<int>(this->Get())] << "\n";
+			ini << this->_config_key << '=' << _tags[static_cast<int>(this->Get())] << "\n";
 		}
 	}
 
 private:
-	lcf::FlagSet<E> _valid = ~lcf::FlagSet<E>();
+	lcf::FlagSet<E> _valid;
 	std::array<StringView, S> _values;
 	std::array<StringView, S> _tags;
 	std::array<StringView, S> _value_descriptions;

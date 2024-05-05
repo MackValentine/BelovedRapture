@@ -193,8 +193,8 @@ void Game_Player::UpdateScroll(int amount, bool was_jumping) {
 	auto dx = (GetX() * SCREEN_TILE_SIZE) - Game_Map::GetPositionX() - GetPanX();
 	auto dy = (GetY() * SCREEN_TILE_SIZE) - Game_Map::GetPositionY() - GetPanY();
 
-	const auto w = Game_Map::GetWidth() * SCREEN_TILE_SIZE;
-	const auto h = Game_Map::GetHeight() * SCREEN_TILE_SIZE;
+	const auto w = Game_Map::GetTilesX() * SCREEN_TILE_SIZE;
+	const auto h = Game_Map::GetTilesY() * SCREEN_TILE_SIZE;
 
 	dx = Utils::PositiveModulo(dx + w / 2, w) - w / 2;
 	dy = Utils::PositiveModulo(dy + h / 2, h) - h / 2;
@@ -755,11 +755,11 @@ void Game_Player::SetTotalEncounterRate(int rate) {
 }
 
 int Game_Player::GetDefaultPanX() {
-	return (std::ceil(static_cast<float>(Player::screen_width) / TILE_SIZE / 2) - 1) * SCREEN_TILE_SIZE;
+	return static_cast<int>(std::ceil(static_cast<float>(Player::screen_width) / TILE_SIZE / 2) - 1) * SCREEN_TILE_SIZE;
 }
 
 int Game_Player::GetDefaultPanY() {
-	return (std::ceil(static_cast<float>(Player::screen_height) / TILE_SIZE / 2) - 1) * SCREEN_TILE_SIZE;
+	return static_cast<int>(std::ceil(static_cast<float>(Player::screen_height) / TILE_SIZE / 2) - 1) * SCREEN_TILE_SIZE;
 }
 
 void Game_Player::LockPan() {
@@ -835,3 +835,6 @@ void Game_Player::UpdatePan() {
 	data()->pan_current_y -= dy;
 }
 
+bool Game_Player::TriggerEventAt(int x, int y) {
+	return CheckEventTriggerThere({ lcf::rpg::EventPage::Trigger_action }, x, y, true);
+}
