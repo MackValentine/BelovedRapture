@@ -141,6 +141,9 @@ void Sprite_Actor::SetAnimationState(int state, LoopState loop, int animation_id
 	if (state == 101) {
 		state = 7;
 	}
+	bool was_defending = false;
+	if (anim_state == AnimationState_Defending)
+		was_defending = true;
 
 	anim_state = state;
 
@@ -178,8 +181,17 @@ void Sprite_Actor::SetAnimationState(int state, LoopState loop, int animation_id
 				Output::Warning("Invalid battle animation ID {}", animation_id);
 				animation.reset();
 			} else {
-				animation.reset(new BattleAnimationBattler(*battle_anim, { battler }));
-				animation->SetZ(GetZ());
+
+				if (anim_state == AnimationState_Defending) {
+					if (!was_defending) {
+						animation.reset(new BattleAnimationBattler(*battle_anim, { battler }));
+						animation->SetZ(GetZ());
+					}
+				}
+				else {
+					animation.reset(new BattleAnimationBattler(*battle_anim, { battler }));
+					animation->SetZ(GetZ());
+				}
 			}
 			animation->SetInvert(battler->IsDirectionFlipped());
 		}
@@ -242,11 +254,6 @@ void Sprite_Actor::CreateSprite() {
 
 void Sprite_Actor::DoIdleAnimation() {
 	auto* battler = GetBattler();
-	if (battler->IsDefending()) {
-		SetAnimationState(AnimationState_Defending);
-		idling = true;
-		return;
-	}
 
 	const lcf::rpg::State* state = battler->GetSignificantState();
 	int idling_anim;
@@ -260,6 +267,14 @@ void Sprite_Actor::DoIdleAnimation() {
 		}
 	} else {
 		idling_anim = state ? state->battler_animation_id + 1 : AnimationState_Idle;
+	}
+
+	if (idling_anim == AnimationState_Idle) {
+		if (battler->IsDefending()) {
+			SetAnimationState(AnimationState_Defending, LoopState_WaitAfterFinish);
+			idling = true;
+			return;
+		}
 	}
 
 	if (idling_anim == 101)

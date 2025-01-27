@@ -45,6 +45,7 @@ namespace Game_Battle {
 	std::string background_name;
 
 	std::unique_ptr<Game_Interpreter_Battle> interpreter;
+	std::unique_ptr<Game_Interpreter_Battle> interpreter_pp;
 	/** Contains battle related sprites */
 	std::unique_ptr<Spriteset_Battle> spriteset;
 
@@ -73,6 +74,7 @@ void Game_Battle::Init(int troop_id) {
 	Main_Data::game_actors->ResetBattle();
 
 	interpreter.reset(new Game_Interpreter_Battle(troop->pages));
+	interpreter_pp.reset(new Game_Interpreter_Battle(troop->pages));
 	spriteset.reset(new Spriteset_Battle(background_name, terrain_id));
 	spriteset->Update();
 	animation_actors.reset();
@@ -90,6 +92,7 @@ void Game_Battle::Quit() {
 	}
 
 	interpreter.reset();
+	interpreter_pp.reset();
 	spriteset.reset();
 	animation_actors.reset();
 	animation_enemies.reset();
@@ -238,9 +241,12 @@ void Game_Battle::UpdateAtbGauges() {
 					Main_Data::game_variables->Set(Var_ID + 2, cur_atb);
 					Main_Data::game_variables->Set(Var_ID + 3, increment);
 
+					// TODO
 					Game_CommonEvent* ce = Game_Battle::StartCommonEventID(CE_ID);
 					ce->UpdateBattle(true, CE_ID);
-					Game_Battle::GetInterpreter().Clear();
+					ce->KillCE();
+					Game_Battle::interpreter_pp->RemoveCommonEventID(CE_ID);
+					//Game_Battle::GetInterpreter().Clear();
 
 					increment = Main_Data::game_variables->Get(Var_ID + 3);
 
@@ -280,6 +286,11 @@ Game_Interpreter& Game_Battle::GetInterpreter() {
 Game_Interpreter_Battle& Game_Battle::GetInterpreterBattle() {
 	assert(interpreter);
 	return *interpreter;
+}
+
+Game_Interpreter& Game_Battle::GetInterpreter_pp() {
+	assert(interpreter_pp);
+	return *interpreter_pp;
 }
 
 void Game_Battle::SetTerrainId(int id) {
@@ -573,7 +584,8 @@ Point Game_Battle::Calculate2k3BattlePosition(const Game_Actor& actor) {
 }
 
 Game_CommonEvent* Game_Battle::StartCommonEventID(int id) {
-	Game_CommonEvent* ce = GetInterpreterBattle().StartCommonEvent(id);
+	//Game_CommonEvent* ce = GetInterpreterBattle().StartCommonEvent(id);
+	Game_CommonEvent* ce = interpreter_pp->StartCommonEvent(id);
 	ce->ForceCreate(id);
 	return ce;
 }
@@ -586,14 +598,13 @@ void Game_Battle::StartCommonEvent(int type) {
 		Game_CommonEvent* common_event = lcf::ReaderUtil::GetElement(Game_Map::GetCommonEvents(), i);
 
 		int trigger = common_event->GetTrigger();
-		//Output::Warning(std::to_string(trigger));
 
 		bool switch_on = true;
 		if (common_event->GetSwitchFlag())
 			switch_on = Main_Data::game_switches->Get(common_event->GetSwitchId());
 
 		if (trigger == type + 5 && switch_on)
-			bool b = GetInterpreterBattle().StartCommonEvent(i);
+			bool b = interpreter_pp->StartCommonEvent(i);
 	}
 
 }

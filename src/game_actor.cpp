@@ -934,6 +934,8 @@ void Game_Actor::ChangeBattleCommands(bool add, int id) {
 		data.changed_battle_commands = true;
 	}
 
+	need_refresh_commands = true;
+
 	// The battle commands array always has a size of 7 padded with -1. The last element before the padding is 0 which
 	// stands for the Row command
 	if (add) {

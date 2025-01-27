@@ -123,6 +123,7 @@ namespace Game_Battle {
 	 * @return the game interpreter.
 	 */
 	Game_Interpreter& GetInterpreter();
+	Game_Interpreter& GetInterpreter_pp();
 
 	/**
 	 * Gets the battle game interpreter.

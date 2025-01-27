@@ -407,6 +407,15 @@ int process(std::vector<int32_t>::iterator& it, std::vector<int32_t>::iterator e
 					}
 					return 0;
 			}
+		case Op::AssignInplace:
+
+			Output::Debug("EasyRPG : WIP command (v[Z] = v[X]=YYY )");
+			++it;
+			imm = process(it, end, ip);
+			imm2 = process(it, end, ip);
+			Main_Data::game_variables->Set(imm, imm2);
+			return Main_Data::game_variables->Get(imm);
+
 		default:
 			Output::Warning("Maniac: Expression contains unsupported operation {}", static_cast<int>(op));
 			return 0;

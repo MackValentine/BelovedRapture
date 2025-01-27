@@ -930,6 +930,8 @@ public:
 
 	int GetActorAi() const;
 
+	bool need_refresh_commands;
+
 private:
 	void AdjustEquipmentStates(const lcf::rpg::Item* item, bool add, bool allow_battle_states);
 	void Fixup();

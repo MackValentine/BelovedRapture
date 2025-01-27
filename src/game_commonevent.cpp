@@ -31,7 +31,7 @@ Game_CommonEvent::Game_CommonEvent(int common_event_id) :
 {
 	auto* ce = lcf::ReaderUtil::GetElement(lcf::Data::commonevents, common_event_id);
 
-	if (ce->trigger == lcf::rpg::EventPage::Trigger_parallel
+	if ((ce->trigger == lcf::rpg::EventPage::Trigger_parallel)// || ce->trigger == 7 || ce->trigger == 6)
 			&& !ce->event_commands.empty()) {
 		interpreter.reset(new Game_Interpreter_Map());
 		interpreter->Push(this);
@@ -43,12 +43,19 @@ Game_CommonEvent::Game_CommonEvent(int common_event_id) :
 void Game_CommonEvent::ForceCreate(int ce_ID) {
 	auto* ce = lcf::ReaderUtil::GetElement(lcf::Data::commonevents, ce_ID);
 
-	if ((ce->trigger == lcf::rpg::EventPage::Trigger_parallel || ce->ID == ManiacsBattle::Get_ATBCE() || ce->ID == ManiacsBattle::Get_TargetCE() ||
+	if ((ce->trigger == lcf::rpg::EventPage::Trigger_parallel || ce->trigger == 7 || ce->trigger == 6 || ce->ID == ManiacsBattle::Get_ATBCE() || ce->ID == ManiacsBattle::Get_TargetCE() ||
 		ce->ID == ManiacsBattle::Get_DamageCE() || ce->ID == ManiacsBattle::Get_StateCE() || ce->ID == ManiacsBattle::Get_StatsCE())
 		&& !ce->event_commands.empty())
 	{
-		interpreter.reset(new Game_Interpreter_Map());
-		interpreter->Push(this);
+		bool main_flag = false;
+	/*	main_flag = true;
+		if (ce->trigger != 7)
+			main_flag = false;*/
+
+		//interpreter.reset(new Game_Interpreter_Map(main_flag));
+		interpreter_pp.reset(new Game_Interpreter_Battle(main_flag));
+		interpreter_pp->Push(this);
+
 	}
 }
 
@@ -77,20 +84,30 @@ AsyncOp Game_CommonEvent::Update(bool resume_async) {
 	return {};
 }
 
-AsyncOp Game_CommonEvent::UpdateBattle(bool resume_async, int ce_ID) {
-	if (interpreter) {
-		assert(interpreter->IsRunning());
-		interpreter->Update(!resume_async);
+void Game_CommonEvent::KillCE() {
+	if (interpreter_pp) {
+		interpreter_pp->Clear();
+		interpreter_pp.reset(new Game_Interpreter_Battle());
+	}
+}
 
-		// Suspend due to async op ...
-		if (interpreter->IsAsyncPending()) {
-			return interpreter->GetAsyncOp();
+AsyncOp Game_CommonEvent::UpdateBattle(bool resume_async, int ce_ID) {
+	if (interpreter_pp) {
+		if (interpreter_pp->IsRunning()) {
+			interpreter_pp->Update(!resume_async);
+
+			// Suspend due to async op ...
+			if (interpreter_pp->IsAsyncPending()) {
+				return interpreter_pp->GetAsyncOp();
+			}
+		}
+		else {
+			Output::Warning("Battle Interpreter not running");
 		}
 	}
 	else {
 		Output::Warning("Common Event {} is empty or doesn't exist", ce_ID);
 	}
-
 	return {};
 }
 

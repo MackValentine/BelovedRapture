@@ -26,6 +26,7 @@
 #include <lcf/rpg/saveeventexecstate.h>
 #include "async_op.h"
 #include "string_view.h"
+#include <game_interpreter_battle.h>
 
 /**
  * Game_CommonEvent class.
@@ -54,7 +55,9 @@ public:
 	 */
 	AsyncOp Update(bool resume_async);
 
-	AsyncOp Game_CommonEvent::UpdateBattle(bool resume_async, int ce_ID);
+	AsyncOp UpdateBattle(bool resume_async, int ce_ID);
+
+	void KillCE();
 
 	/**
 	 * Gets common event index.
@@ -121,6 +124,7 @@ private:
 
 	/** Interpreter for parallel common events. */
 	std::unique_ptr<Game_Interpreter_Map> interpreter;
+	std::unique_ptr<Game_Interpreter_Battle> interpreter_pp;
 };
 
 #endif

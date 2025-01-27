@@ -350,9 +350,8 @@ bool Game_Battler::AddState(int state_id, bool allow_battle_states) {
 		Main_Data::game_variables->Set(Var_ID + 1, index);
 		Main_Data::game_variables->Set(Var_ID + 2, state_id);
 
-		Game_CommonEvent* ce = Game_Battle::StartCommonEventID(CE_ID);
+		auto ce = Game_Battle::StartCommonEventID(CE_ID);
 		ce->UpdateBattle(true, CE_ID);
-		Game_Battle::GetInterpreter().Clear();
 
 		int v = Var_ID + 2;
 		state_id = Main_Data::game_variables->Get(v);
@@ -552,10 +551,8 @@ int Game_Battler::ChangeSp(int sp) {
 			Main_Data::game_variables->Set(Var_ID + 5, sp);
 
 
-			Game_CommonEvent* ce = Game_Battle::StartCommonEventID(CE_ID);
-
+			auto ce = Game_Battle::StartCommonEventID(CE_ID);
 			ce->UpdateBattle(true, CE_ID);
-			Game_Battle::GetInterpreter().Clear();
 
 			sp = Main_Data::game_variables->Get(Var_ID + 5);
 
@@ -826,9 +823,8 @@ int Game_Battler::ChangeAtkModifier(int modifier) {
 		Main_Data::game_variables->Set(Var_ID + 5, delta);
 
 
-		Game_CommonEvent* ce = Game_Battle::StartCommonEventID(CE_ID);
+		auto ce = Game_Battle::StartCommonEventID(CE_ID);
 		ce->UpdateBattle(true, CE_ID);
-		Game_Battle::GetInterpreter().Clear();
 
 		delta = Main_Data::game_variables->Get(Var_ID + 5);
 
@@ -862,9 +858,8 @@ int Game_Battler::ChangeDefModifier(int modifier) {
 		Main_Data::game_variables->Set(Var_ID + 5, delta);
 
 
-		Game_CommonEvent* ce = Game_Battle::StartCommonEventID(CE_ID);
+		auto ce = Game_Battle::StartCommonEventID(CE_ID);
 		ce->UpdateBattle(true, CE_ID);
-		Game_Battle::GetInterpreter().Clear();
 
 		delta = Main_Data::game_variables->Get(Var_ID + 5);
 
@@ -898,9 +893,8 @@ int Game_Battler::ChangeSpiModifier(int modifier) {
 		Main_Data::game_variables->Set(Var_ID + 5, delta);
 
 
-		Game_CommonEvent* ce = Game_Battle::StartCommonEventID(CE_ID);
+		auto ce = Game_Battle::StartCommonEventID(CE_ID);
 		ce->UpdateBattle(true, CE_ID);
-		Game_Battle::GetInterpreter().Clear();
 
 		delta = Main_Data::game_variables->Get(Var_ID + 5);
 
@@ -934,9 +928,8 @@ int Game_Battler::ChangeAgiModifier(int modifier) {
 		Main_Data::game_variables->Set(Var_ID + 5, delta);
 
 
-		Game_CommonEvent* ce = Game_Battle::StartCommonEventID(CE_ID);
+		auto ce = Game_Battle::StartCommonEventID(CE_ID);
 		ce->UpdateBattle(true, CE_ID);
-		Game_Battle::GetInterpreter().Clear();
 
 		delta = Main_Data::game_variables->Get(Var_ID + 5);
 

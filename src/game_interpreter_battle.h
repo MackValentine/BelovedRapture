@@ -40,6 +40,7 @@ class Game_Interpreter_Battle : public Game_Interpreter
 {
 public:
 	explicit Game_Interpreter_Battle(Span<const lcf::rpg::TroopPage> pages);
+	explicit Game_Interpreter_Battle(bool main_flag = false);
 
 	int GetNumPages() const;
 
@@ -60,6 +61,7 @@ public:
 
 	Game_CommonEvent* StartCommonEvent(int i);
 	void PushCommonEvent(Game_CommonEvent* ev);
+	void RemoveCommonEventID(int eventID);
 
 	bool ExecuteCommand(lcf::rpg::EventCommand const& com) override;
 
@@ -78,10 +80,6 @@ private:
 	bool CommandElseBranchBattle(lcf::rpg::EventCommand const& com);
 	bool CommandEndBranchBattle(lcf::rpg::EventCommand const& com);
 
-	bool CommandManiacControlBattle(lcf::rpg::EventCommand const& com);
-	bool CommandManiacControlAtbGauge(lcf::rpg::EventCommand const& com);
-	bool CommandManiacChangeBattleCommandEx(lcf::rpg::EventCommand const& com);
-	bool CommandManiacGetBattleInfo(lcf::rpg::EventCommand const& com);
 
 private:
 	Span<const lcf::rpg::TroopPage> pages;

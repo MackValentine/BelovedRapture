@@ -134,7 +134,7 @@ int ControlVariables::Actor(int op, int actor_id) {
 		case 16:
 			// ATB
 			if (Player::IsPatchManiac()) {
-				return actor->GetAtbGauge();
+				return actor->GetAtbGauge() * 100 / actor->GetMaxAtbGauge();
 			}
 			break;
 	}
@@ -349,7 +349,7 @@ int ControlVariables::Enemy(int op, int enemy_idx) {
 		case 9:
 			// ATB
 			if (Player::IsPatchManiac()) {
-				return enemy->GetAtbGauge();
+				return enemy->GetAtbGauge() * 100 / enemy->GetMaxAtbGauge();
 			}
 			break;
 	}

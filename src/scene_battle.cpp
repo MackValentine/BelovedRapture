@@ -137,7 +137,6 @@ void Scene_Battle::Start() {
 
 	SetState(State_Start);
 
-	Game_Battle::StartCommonEvent(1);
 }
 
 void Scene_Battle::InitEscapeChance() {

@@ -108,7 +108,7 @@ public:
 	bool IsWaitingForWaitCommand() const;
 
 protected:
-	static constexpr int loop_limit = 10000;
+	static constexpr int loop_limit = 1000000;
 	static constexpr int call_stack_limit = 1000;
 	static constexpr int subcommand_sentinel = 255;
 
@@ -289,6 +289,16 @@ protected:
 	bool CommandManiacSetGameOption(lcf::rpg::EventCommand const& com);
 	bool CommandManiacControlStrings(lcf::rpg::EventCommand const& com);
 	bool CommandManiacCallCommand(lcf::rpg::EventCommand const& com);
+
+	bool CommandManiacGetBattleInfo(lcf::rpg::EventCommand const& com);
+	bool CommandManiacControlBattle(lcf::rpg::EventCommand const& com);
+	bool CommandManiacControlAtbGauge(lcf::rpg::EventCommand const& com);
+	bool CommandManiacChangeBattleCommandEx(lcf::rpg::EventCommand const& com);
+
+	bool CommandGetStringFromDB(lcf::rpg::EventCommand const& com);
+	bool CommandUseItem(lcf::rpg::EventCommand const& com);
+	bool CommandCanUseItem(lcf::rpg::EventCommand const& com);
+	bool CommandPrint(lcf::rpg::EventCommand const& com);
 
 	int DecodeInt(lcf::DBArray<int32_t>::const_iterator& it);
 	const std::string DecodeString(lcf::DBArray<int32_t>::const_iterator& it);

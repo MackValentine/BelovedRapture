@@ -141,6 +141,7 @@ int Game_Strings::Split(Str_Params params, const std::string& delimiter, int str
 				splits++;
 				str.erase(0, index + delimiter.length());
 			}
+			splits++;
 		}
 	}
 

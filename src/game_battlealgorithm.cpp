@@ -445,9 +445,8 @@ void Game_BattleAlgorithm::AlgorithmBase::Start() {
 
 		// Actions Var
 
-		Game_CommonEvent* ce = Game_Battle::StartCommonEventID(CE_ID);
+		auto ce = Game_Battle::StartCommonEventID(CE_ID);
 		ce->UpdateBattle(true, CE_ID);
-		Game_Battle::GetInterpreter().Clear();
 
 		int v = ManiacsBattle::Get_TargetVar() + 4;
 		int target_type = Main_Data::game_variables->Get(v);

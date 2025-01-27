@@ -351,7 +351,8 @@ void Scene_Battle_Rpg2k3::CreateUi() {
 		status_window->SetY(y);
 
 		if (lcf::Data::battlecommands.battle_type == lcf::rpg::BattleCommands::BattleType_gauge) {
-			command_window->SetY(Player::screen_height / 2 - 80 / 2 + 12);
+			command_window->SetY(185);
+			command_window->SetHeight(54);
 			item_window->SetY(76);
 			skill_window->SetY(76);
 		}
@@ -631,9 +632,11 @@ void Scene_Battle_Rpg2k3::CreateBattleCommandWindow() {
 
 	SetBattleCommandsDisable(*command_window, actor);
 
-	int height = 80;
+	int height = 55;
 
+	command_window->SetWidth(88);
 	command_window->SetHeight(height);
+
 	switch (lcf::Data::battlecommands.battle_type) {
 		case lcf::rpg::BattleCommands::BattleType_traditional:
 			command_window->SetX(Player::menu_offset_x + target_window->GetWidth() - command_window->GetWidth());
@@ -648,7 +651,8 @@ void Scene_Battle_Rpg2k3::CreateBattleCommandWindow() {
 			command_window->SetY(Player::screen_height / 2 - height / 2);
 			break;
 	}
-	// Above the target window
+	command_window->SetX(7);
+	command_window->SetY(185);
 	command_window->SetZ(Priority_Window + 20);
 
 	if (lcf::Data::battlecommands.battle_type != lcf::rpg::BattleCommands::BattleType_traditional) {
@@ -708,7 +712,7 @@ void Scene_Battle_Rpg2k3::MoveCommandWindows(int x, int frames) {
 		x += options_window->GetWidth();
 
 		status_window->InitMovement(status_window->GetX(), status_window->GetY(),
-				x, status_window->GetY(), frames);
+				x + 47, status_window->GetY(), frames);
 
 		if (lcf::Data::battlecommands.battle_type == lcf::rpg::BattleCommands::BattleType_alternative) {
 			x += status_window->GetWidth();
@@ -950,6 +954,10 @@ void Scene_Battle_Rpg2k3::vUpdate() {
 		if (Game_Message::IsMessageActive()) {
 			break;
 		}
+		if (Game_Battle::GetInterpreter_pp().IsRunning() && (state == State_Victory || state == State_Defeat || state == State_Start)) {
+			if (Game_Battle::GetInterpreter_pp().IsWaitingForWaitCommand())
+				break;
+		}
 
 		if (state != State_Victory && state != State_Defeat && Game_Battle::GetInterpreter().IsRunning()) {
 			break;
@@ -964,7 +972,8 @@ void Scene_Battle_Rpg2k3::vUpdate() {
 		}
 	}
 
-	if (!Game_Message::IsMessageActive()) {
+	if (!Game_Message::IsMessageActive() && state != State_Start)
+	{
 		Game_Battle::StartCommonEvent(2);
 	}
 
@@ -1064,6 +1073,14 @@ Scene_Battle_Rpg2k3::SceneActionReturn Scene_Battle_Rpg2k3::ProcessSceneAction()
 		}
 	}
 
+	if (active_actor) {
+		if (active_actor->need_refresh_commands) {
+			auto* display_actor = active_actor ? active_actor : Main_Data::game_party->GetActor(0);
+			RefreshCommandWindow(display_actor);
+			active_actor->need_refresh_commands = false;
+		}
+	}
+
 	switch (state) {
 		case State_Start:
 			return ProcessSceneActionStart();
@@ -1103,6 +1120,8 @@ Scene_Battle_Rpg2k3::SceneActionReturn Scene_Battle_Rpg2k3::ProcessSceneActionSt
 		eUpdateBattlers,
 		eUpdateEvents,
 	};
+
+	Game_Battle::StartCommonEvent(1);
 
 	if (scene_action_substate == eStartMessage) {
 		ResetWindows(true);
@@ -1779,6 +1798,10 @@ Scene_Battle_Rpg2k3::SceneActionReturn Scene_Battle_Rpg2k3::ProcessSceneActionVi
 	}
 
 	if (scene_action_substate == eBegin) {
+		if (!Game_Message::IsMessageActive())
+		{
+			Game_Battle::StartCommonEvent(2);
+		}
 		ResetWindows(true);
 		status_window->SetVisible(true);
 
@@ -2214,17 +2237,23 @@ Scene_Battle_Rpg2k3::BattleActionReturn Scene_Battle_Rpg2k3::ProcessBattleAction
 					Main_Data::game_variables->Set(Var_ID + 1, Main_Data::game_party->GetActorPositionInParty(b->GetId()));
 				}
 
-				Main_Data::game_variables->Set(Var_ID + 2, b->GetBattlePosition().x);
+				Main_Data::game_variables->Set(Var_ID + 2, b->GetBattlePosition().x + 35);
 				Main_Data::game_variables->Set(Var_ID + 3, b->GetBattlePosition().y);
 
 				Main_Data::game_variables->Set(Var_ID + 4, damageTaken < 0 ? 0 : 1);
 				Main_Data::game_variables->Set(Var_ID + 5, std::abs(damageTaken));
 
-				Main_Data::game_variables->Set(Var_ID + 6, 100);
+				// Output::Debug(" {} {} {} {}", b->GetId(), b->GetBattlePosition().x, b->GetBattlePosition().y, damageTaken);
 
 				auto ce = Game_Battle::StartCommonEventID(CE_ID);
 				ce->UpdateBattle(true, CE_ID);
-				Game_Battle::GetInterpreter().Clear();
+
+				//Game_Battle::GetInterpreter().Push(ce);
+				//Game_Battle::GetInterpreter_pp().Update(false);
+				//Game_Battle::GetInterpreterBattle().Update(true);
+				//Game_Battle::GetInterpreterBattle().RemoveCommonEventID(CE_ID);
+				//ce->KillCE();
+				// Game_Battle::GetInterpreter().Clear();
 			}
 			else
 				DrawFloatText(
@@ -2722,7 +2751,7 @@ Scene_Battle_Rpg2k3::BattleActionReturn Scene_Battle_Rpg2k3::ProcessBattleAction
 				lcf::Data::terms.miss);
 	}
 	if (CE_ID > 0) {
-		int x = target->GetBattlePosition().x;
+		int x = target->GetBattlePosition().x + 35;
 		int y = target->GetBattlePosition().y;
 
 		Main_Data::game_variables->Set(Var_ID + 2, x);
@@ -2730,7 +2759,8 @@ Scene_Battle_Rpg2k3::BattleActionReturn Scene_Battle_Rpg2k3::ProcessBattleAction
 
 		if ((action->IsAffectHp() || !action->IsSuccess())) {
 
-			Game_Battle::StartCommonEventID(CE_ID);
+			auto ce = Game_Battle::StartCommonEventID(CE_ID);
+			ce->UpdateBattle(true, CE_ID);
 		}
 	}
 
@@ -2972,11 +3002,37 @@ void Scene_Battle_Rpg2k3::OnPartyChanged(Game_Actor* actor, bool added) {
 }
 
 void Scene_Battle_Rpg2k3::OnEventHpChanged(Game_Battler* battler, int hp) {
-	DrawFloatText(
+	int CE_ID = ManiacsBattle::Get_DamageCE();
+	int Var_ID = ManiacsBattle::Get_DamageVar();
+	if (CE_ID > 0) {
+		Main_Data::game_variables->Set(Var_ID + 4, 0);
+		Main_Data::game_variables->Set(Var_ID + 5, 0);
+		if (battler->GetType() == Game_Battler::Type_Enemy) {
+			Main_Data::game_variables->Set(Var_ID, 1);
+			auto* enemy = static_cast<Game_Enemy*>(battler);
+			Main_Data::game_variables->Set(Var_ID + 1, enemy->GetTroopMemberId() - 1);
+		}
+		else {
+			Main_Data::game_variables->Set(Var_ID, 0);
+			Main_Data::game_variables->Set(Var_ID + 1, Main_Data::game_party->GetActorPositionInParty(battler->GetId()));
+		}
+
+		Main_Data::game_variables->Set(Var_ID + 2, battler->GetBattlePosition().x + 35);
+		Main_Data::game_variables->Set(Var_ID + 3, battler->GetBattlePosition().y);
+
+		Main_Data::game_variables->Set(Var_ID + 4, hp < 0 ? 0 : 1);
+		Main_Data::game_variables->Set(Var_ID + 5, std::abs(hp));
+
+		auto ce = Game_Battle::StartCommonEventID(CE_ID);
+		ce->UpdateBattle(true, CE_ID);
+	}
+	else {
+		DrawFloatText(
 			battler->GetBattlePosition().x,
 			battler->GetBattlePosition().y,
 			hp < 0 ? Font::ColorDefault : Font::ColorHeal,
 			std::to_string(std::abs(hp)));
+	}
 }
 
 void Scene_Battle_Rpg2k3::RecreateSpWindow(Game_Battler* battler) {
