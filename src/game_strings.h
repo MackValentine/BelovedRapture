@@ -15,7 +15,8 @@
  * along with EasyRPG Player. If not, see <http://www.gnu.org/licenses/>.
  */
 
- // Headers
+// Headers
+#include "system.h"
 #include <cstdint>
 #include <string>
 #include <lcf/data.h>
@@ -26,9 +27,23 @@
 #include "pending_message.h"
 #include "player.h"
 #include "string_view.h"
+#include "utils.h"
+
+#include <regex>
+
+#ifdef HAVE_NLOHMANN_JSON
+#include <nlohmann/json.hpp>
+#endif
 
 /**
  * Game_Strings class.
+ * For all operations codepoints are used (instead of bytes).
+ * This way operations that use the length or the index work almost like in Maniac Patch.
+ * And using codepoints is better anyway because this is a single character.
+ * With bytes you have the risk to "chop" a character in half.
+ *
+ * Where simple to implement UTF8 is used directly.
+ * In other cases the code does a roundtrip through UTF32.
  */
 class Game_Strings {
 public:
@@ -39,6 +54,15 @@ public:
 
 	struct Str_Params {
 		int string_id = 0, hex = 0, extract = 0;
+
+		Str_Params(int string_id) : string_id(string_id) {}
+		Str_Params(int string_id, int hex, int extract) : string_id(string_id), hex(hex), extract(extract) {}
+	};
+
+	enum StringEvalMode : std::int8_t { // 4 bits
+		eStringEval_Text = 0, // String is taken from com.string
+		eStringEval_Direct = 1, // String is referenced directly by string id
+		eStringEval_Indirect = 2 // String is referenced indirectly by variable id
 	};
 
 	Game_Strings() = default;
@@ -51,7 +75,11 @@ public:
 	StringView Get(int id) const;
 	StringView GetIndirect(int id, const Game_Variables& variables) const;
 	StringView GetWithMode(StringView str_data, int mode, int arg, const Game_Variables& variables) const;
-	StringView GetWithModeAndPos(StringView str_data, int mode, int arg, int* pos, const Game_Variables& variables);
+	std::string GetWithModeAndPos(StringView str_data, int mode, int arg, int& pos, const Game_Variables& variables);
+
+#ifdef HAVE_NLOHMANN_JSON
+	nlohmann::ordered_json* ParseJson(int id);
+#endif
 
 	StringView Asg(Str_Params params, StringView string);
 	StringView Cat(Str_Params params, StringView string);
@@ -68,6 +96,11 @@ public:
 
 	static std::string PrependMin(StringView string, int min_size, char c);
 	static std::string Extract(StringView string, bool as_hex);
+	static std::string Substring(StringView source, int begin, int length);
+	static std::string Insert(StringView source, StringView what, int where);
+	static std::string Erase(StringView source, int begin, int length);
+	static std::string RegExReplace(StringView str, StringView search, StringView replace, std::regex_constants::match_flag_type flags = std::regex_constants::match_default);
+	static int AdjustIndex(StringView str, int index);
 
 	static std::optional<std::string> ManiacsCommandInserter(char ch, const char** iter, const char* end, uint32_t escape_char);
 	static std::optional<std::string> ManiacsCommandInserterHex(char ch, const char** iter, const char* end, uint32_t escape_char);
@@ -80,8 +113,11 @@ private:
 
 	Strings_t _strings;
 	mutable int _warnings = max_warnings;
-};
 
+#ifdef HAVE_NLOHMANN_JSON
+	std::unordered_map<int, nlohmann::ordered_json> _json_cache;
+#endif
+};
 
 inline void Game_Strings::Set(Str_Params params, StringView string) {
 	if (params.string_id <= 0) {
@@ -103,10 +139,18 @@ inline void Game_Strings::Set(Str_Params params, StringView string) {
 	} else {
 		it->second = ins_string;
 	}
+
+#ifdef HAVE_NLOHMANN_JSON
+	_json_cache.erase(params.string_id);
+#endif
 }
 
 inline void Game_Strings::SetData(Strings_t s) {
 	_strings = std::move(s);
+
+#ifdef HAVE_NLOHMANN_JSON
+	_json_cache.clear();
+#endif
 }
 
 inline void Game_Strings::SetData(const std::vector<lcf::DBString>& s) {
@@ -117,6 +161,10 @@ inline void Game_Strings::SetData(const std::vector<lcf::DBString>& s) {
 		}
 		++i;
 	}
+
+#ifdef HAVE_NLOHMANN_JSON
+	_json_cache.clear();
+#endif
 }
 
 inline const Game_Strings::Strings_t& Game_Strings::GetData() const {
@@ -128,7 +176,7 @@ inline std::vector<lcf::DBString> Game_Strings::GetLcfData() const {
 
 	for (auto& [index, value]: _strings) {
 		assert(index > 0);
-		if (index >= lcf_data.size()) {
+		if (index >= static_cast<int>(lcf_data.size())) {
 			lcf_data.resize(index + 1);
 		}
 		lcf_data[index - 1] = lcf::DBString(value);
@@ -159,28 +207,33 @@ inline StringView Game_Strings::GetIndirect(int id, const Game_Variables& variab
 
 inline StringView Game_Strings::GetWithMode(StringView str_data, int mode, int arg, const Game_Variables& variables) const {
 	switch (mode) {
-	case 1: // direct string reference
+	case StringEvalMode::eStringEval_Direct:
 		return Get(arg);
-	case 2: // indirect string reference
+	case StringEvalMode::eStringEval_Indirect:
 		return GetIndirect(arg, variables);
 	default:
 		return str_data;
 	}
 }
 
-inline StringView Game_Strings::GetWithModeAndPos(StringView str_data, int mode, int arg, int* pos, const Game_Variables& variables) {
-	StringView ret;
+inline std::string Game_Strings::GetWithModeAndPos(StringView str_data, int mode, int arg, int& pos, const Game_Variables& variables) {
+	std::string ret;
 	switch (mode) {
-	case 0:
-		assert(pos);
-		ret = str_data.substr(*pos, arg);
-		*pos += arg;
-		return ret;
-	case 1: // direct string reference
-		return Get(arg);
-	case 2: // indirect string reference
-		return GetIndirect(arg, variables);
-	default:
-		return ret;
+		case StringEvalMode::eStringEval_Text: {
+			const auto end = str_data.data() + str_data.size();
+
+			auto left = Utils::UTF8Skip(str_data.begin(), end, pos);
+			auto right = Utils::UTF8Skip(left.next, end, arg);
+
+			ret = std::string(left.next, right.next);
+			pos += arg;
+			return ret;
+		}
+		case StringEvalMode::eStringEval_Direct:
+			return ToString(Get(arg));
+		case StringEvalMode::eStringEval_Indirect:
+			return ToString(GetIndirect(arg, variables));
+		default:
+			return ret;
 	}
 }

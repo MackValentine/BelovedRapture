@@ -80,6 +80,8 @@ public:
 
 	void Start() override;
 
+	void CreateOptions();
+
 	void UpdateScreen();
 	void UpdateBattlers();
 	void UpdateUi();

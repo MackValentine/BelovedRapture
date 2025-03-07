@@ -214,8 +214,7 @@ static void appletHookCallback(AppletHookType hook, void* param) {
 
 	switch (hook) {
 		case AppletHookType_OnExitRequest:
-			Output::Warning("Got close request from home menu.");
-			Player::Exit();
+			Output::Debug("Got close request from home menu.");
 			break;
 
 		case AppletHookType_OnFocusState:
@@ -390,13 +389,15 @@ NxUi::~NxUi() {
 	appletUnhook(&applet_hook_cookie);
 }
 
-void NxUi::ProcessEvents() {
+bool NxUi::ProcessEvents() {
 	// handle system events
-	appletMainLoop();
+	if (!appletMainLoop()) {
+		return false;
+	}
 
-	// idle, when out of focus
-	while(appletGetFocusState() != AppletFocusState_InFocus) {
-		Game_Clock::SleepFor(10ms);
+	// skip, when out of focus
+	if(appletGetFocusState() != AppletFocusState_InFocus) {
+		return true;
 	}
 
 	padUpdate(&pad);
@@ -439,7 +440,7 @@ void NxUi::ProcessEvents() {
 
 	// do not handle touch when not displaying buttons or no touch happened
 	if (is_docked || vcfg.touch_ui.IsLocked() || !vcfg.touch_ui.Get() || !hidGetTouchScreenStates(&touch, 1))
-		return;
+		return true;
 
 	for (int32_t i = 0; i < touch.count; ++i) {
 		if (touch.touches[i].x < 160) {
@@ -453,9 +454,16 @@ void NxUi::ProcessEvents() {
 			}
 		}
 	}
+
+	return true;
 }
 
 void NxUi::UpdateDisplay() {
+	// skip, when out of focus
+	if(appletGetFocusState() != AppletFocusState_InFocus) {
+		return;
+	}
+
 	float aspectX = 1.0f;
 	float aspectY = 1.0f;
 

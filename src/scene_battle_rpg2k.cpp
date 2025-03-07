@@ -205,6 +205,12 @@ void Scene_Battle_Rpg2k::vUpdate() {
 			break;
 		}
 
+		// this is checked separately because we want normal events to be processed
+		// just not sub-events called by maniacs battle hooks.
+		if (state != State_Victory && state != State_Defeat && Game_Battle::ManiacProcessSubEvents()) {
+			break;
+		}
+
 		if (!CheckWait()) {
 			break;
 		}
@@ -499,6 +505,15 @@ Scene_Battle_Rpg2k::SceneActionReturn Scene_Battle_Rpg2k::ProcessSceneActionFigh
 							SetState(State_Escape);
 						}
 						break;
+					case Win: // Win
+						for (Game_Enemy* enemy : Main_Data::game_enemyparty->GetEnemies()) {
+							enemy->Kill();
+						}
+						SetState(State_Victory);
+						break;
+					case Lose: // Lose
+						SetState(State_Defeat);
+						break;
 				}
 			}
 			return SceneActionReturn::eWaitTillNextFrame;
@@ -651,7 +666,7 @@ Scene_Battle_Rpg2k::SceneActionReturn Scene_Battle_Rpg2k::ProcessSceneActionSkil
 		ResetWindows(true);
 
 		skill_window->SetActive(true);
-		skill_window->SetActor(active_actor->GetId());
+		skill_window->SetActor(*active_actor);
 		if (previous_state == State_SelectCommand) {
 			skill_window->RestoreActorIndex(actor_index - 1);
 		}

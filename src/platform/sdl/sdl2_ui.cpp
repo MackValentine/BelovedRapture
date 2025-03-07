@@ -14,7 +14,6 @@
  * You should have received a copy of the GNU General Public License
  * along with EasyRPG Player. If not, see <http://www.gnu.org/licenses/>.
  */
-
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -32,7 +31,7 @@
 #elif defined(EMSCRIPTEN)
 #  include <emscripten.h>
 #elif defined(__WIIU__)
-#  include <whb/proc.h>
+#  include "platform/wiiu/main.h"
 #endif
 #include "icon.h"
 
@@ -49,7 +48,11 @@
 #endif
 
 #ifdef SUPPORT_AUDIO
-#  include "sdl_audio.h"
+#  if AUDIO_AESND
+#    include "platform/wii/audio.h"
+#  else
+#    include "sdl2_audio.h"
+#  endif
 
 AudioInterface& Sdl2Ui::GetAudio() {
 	return *audio_;
@@ -57,7 +60,11 @@ AudioInterface& Sdl2Ui::GetAudio() {
 #endif
 
 static uint32_t GetDefaultFormat() {
+#ifdef WORDS_BIGENDIAN
+	return SDL_PIXELFORMAT_ABGR32;
+#else
 	return SDL_PIXELFORMAT_RGBA32;
+#endif
 }
 
 /**
@@ -66,7 +73,18 @@ static uint32_t GetDefaultFormat() {
  * We prefer formats which have fast paths in pixman.
  */
 static int GetFormatRank(uint32_t fmt) {
+
 	switch (fmt) {
+#ifdef WORDS_BIGENDIAN
+		case SDL_PIXELFORMAT_RGBA32:
+			return 0;
+		case SDL_PIXELFORMAT_BGRA32:
+			return 0;
+		case SDL_PIXELFORMAT_ARGB32:
+			return 1;
+		case SDL_PIXELFORMAT_ABGR32:
+			return 2;
+#else
 		case SDL_PIXELFORMAT_RGBA32:
 			return 2;
 		case SDL_PIXELFORMAT_BGRA32:
@@ -75,6 +93,7 @@ static int GetFormatRank(uint32_t fmt) {
 			return 1;
 		case SDL_PIXELFORMAT_ABGR32:
 			return 0;
+#endif
 		default:
 			return -1;
 	}
@@ -155,9 +174,6 @@ Sdl2Ui::Sdl2Ui(long width, long height, const Game_Config& cfg) : BaseUi(cfg)
 	// Only handle keyboard events when the canvas has focus
 	SDL_SetHint(SDL_HINT_EMSCRIPTEN_KEYBOARD_ELEMENT, "#canvas");
 #endif
-#ifdef __WIIU__
-	//WHBProcInit();
-#endif
 
 	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
 		Output::Error("Couldn't initialize SDL.\n{}\n", SDL_GetError());
@@ -186,10 +202,11 @@ Sdl2Ui::Sdl2Ui(long width, long height, const Game_Config& cfg) : BaseUi(cfg)
 #endif
 
 #ifdef SUPPORT_AUDIO
-	if (!Player::no_audio_flag) {
-		audio_ = std::make_unique<SdlAudio>(cfg.audio);
-		return;
-	}
+#  ifdef AUDIO_AESND
+		audio_ = std::make_unique<WiiAudio>(cfg.audio);
+#  else
+		audio_ = std::make_unique<Sdl2Audio>(cfg.audio);
+#  endif
 #endif
 }
 
@@ -209,11 +226,12 @@ Sdl2Ui::~Sdl2Ui() {
 	if (sdl_window) {
 		SDL_DestroyWindow(sdl_window);
 	}
-	SDL_Quit();
 
-#ifdef __WIIU__
-	//WHBProcShutdown();
+#ifdef SUPPORT_AUDIO
+	audio_.reset();
 #endif
+
+	SDL_Quit();
 }
 
 bool Sdl2Ui::vChangeDisplaySurfaceResolution(int new_width, int new_height) {
@@ -524,7 +542,13 @@ void Sdl2Ui::ToggleZoom() {
 #endif
 }
 
-void Sdl2Ui::ProcessEvents() {
+bool Sdl2Ui::ProcessEvents() {
+#if defined(__WIIU__)
+		if (!WiiU_ProcessProcUI()) {
+			return false;
+		}
+#endif
+
 	SDL_Event evnt;
 
 #if defined(USE_MOUSE) && defined(SUPPORT_MOUSE)
@@ -540,9 +564,11 @@ void Sdl2Ui::ProcessEvents() {
 		if (Player::exit_flag)
 			break;
 	}
+
+	return true;
 }
 
-void Sdl2Ui::SetScalingMode(ScalingMode mode) {
+void Sdl2Ui::SetScalingMode(ConfigEnum::ScalingMode mode) {
 	window.size_changed = true;
 	vcfg.scaling_mode.Set(mode);
 }
@@ -569,8 +595,23 @@ void Sdl2Ui::ToggleVsync() {
 }
 
 void Sdl2Ui::UpdateDisplay() {
+#ifdef __WIIU__
+	if (vcfg.scaling_mode.Get() == ConfigEnum::ScalingMode::Bilinear && window.scale > 0.f) {
+		// Workaround WiiU bug: Bilinear uses a render target and for these the format is not converted
+		void* target_pixels;
+		int target_pitch;
+
+		SDL_LockTexture(sdl_texture_game, nullptr, &target_pixels, &target_pitch);
+		SDL_ConvertPixels(main_surface->width(), main_surface->height(), GetDefaultFormat(), main_surface->pixels(),
+			main_surface->pitch(), SDL_PIXELFORMAT_RGBA8888, target_pixels, target_pitch);
+		SDL_UnlockTexture(sdl_texture_game);
+	} else {
+		SDL_UpdateTexture(sdl_texture_game, nullptr, main_surface->pixels(), main_surface->pitch());
+	}
+#else
 	// SDL_UpdateTexture was found to be faster than SDL_LockTexture / SDL_UnlockTexture.
 	SDL_UpdateTexture(sdl_texture_game, nullptr, main_surface->pixels(), main_surface->pitch());
+#endif
 
 	if (window.size_changed && window.width > 0 && window.height > 0) {
 		// Based on SDL2 function UpdateLogicalSize
@@ -589,7 +630,7 @@ void Sdl2Ui::UpdateDisplay() {
 			}
 		};
 
-		if (vcfg.scaling_mode.Get() == ScalingMode::Integer) {
+		if (vcfg.scaling_mode.Get() == ConfigEnum::ScalingMode::Integer) {
 			// Integer division on purpose
 			if (want_aspect > real_aspect) {
 				window.scale = static_cast<float>(window.width / main_surface->width());
@@ -634,7 +675,7 @@ void Sdl2Ui::UpdateDisplay() {
 			SDL_RenderSetViewport(sdl_renderer, &viewport);
 		}
 
-		if (vcfg.scaling_mode.Get() == ScalingMode::Bilinear && window.scale > 0.f) {
+		if (vcfg.scaling_mode.Get() == ConfigEnum::ScalingMode::Bilinear && window.scale > 0.f) {
 			if (sdl_texture_scaled) {
 				SDL_DestroyTexture(sdl_texture_scaled);
 			}
@@ -649,7 +690,7 @@ void Sdl2Ui::UpdateDisplay() {
 	}
 
 	SDL_RenderClear(sdl_renderer);
-	if (vcfg.scaling_mode.Get() == ScalingMode::Bilinear && window.scale > 0.f) {
+	if (vcfg.scaling_mode.Get() == ConfigEnum::ScalingMode::Bilinear && window.scale > 0.f) {
 		// Render game texture on the scaled texture
 		SDL_SetRenderTarget(sdl_renderer, sdl_texture_scaled);
 		SDL_RenderClear(sdl_renderer);
@@ -672,6 +713,24 @@ bool Sdl2Ui::ShowCursor(bool flag) {
 	cursor_visible = flag;
 	SDL_ShowCursor(flag ? SDL_ENABLE : SDL_DISABLE);
 	return temp_flag;
+}
+
+bool Sdl2Ui::HandleErrorOutput(const std::string &message) {
+	std::string title = Player::GetFullVersionString();
+
+	// Manually Restore window from fullscreen, since message would not be visible otherwise
+	if ((current_display_mode.flags & SDL_WINDOW_FULLSCREEN_DESKTOP)
+		== SDL_WINDOW_FULLSCREEN_DESKTOP) {
+		SDL_SetWindowFullscreen(sdl_window, 0);
+		SDL_SetWindowSize(sdl_window, 0, 0);
+	}
+
+	if(SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, title.c_str(),
+		message.c_str(), sdl_window) != 0) {
+		return false;
+	}
+
+	return true;
 }
 
 void Sdl2Ui::ProcessEvent(SDL_Event &evnt) {
@@ -732,24 +791,31 @@ void Sdl2Ui::ProcessEvent(SDL_Event &evnt) {
 
 void Sdl2Ui::ProcessWindowEvent(SDL_Event &evnt) {
 	int state = evnt.window.event;
-#if PAUSE_GAME_WHEN_FOCUS_LOST
+
 	if (state == SDL_WINDOWEVENT_FOCUS_LOST) {
+		auto cfg = vcfg;
+		vGetConfig(cfg);
+		if (!cfg.pause_when_focus_lost.Get()) {
+			return;
+		}
 
 		Player::Pause();
 
 		bool last = ShowCursor(true);
 
-#ifndef EMSCRIPTEN
 		// Filter SDL events until focus is regained
-
 		SDL_Event wait_event;
 
 		while (SDL_WaitEvent(&wait_event)) {
+			if (wait_event.type == SDL_WINDOWEVENT && wait_event.window.event != SDL_WINDOWEVENT_FOCUS_LOST) {
+				// Process size change etc. events
+				ProcessWindowEvent(wait_event);
+			}
+
 			if (FilterUntilFocus(&wait_event)) {
 				break;
 			}
 		}
-#endif
 
 		ShowCursor(last);
 
@@ -758,7 +824,7 @@ void Sdl2Ui::ProcessWindowEvent(SDL_Event &evnt) {
 
 		return;
 	}
-#endif
+
 #if defined(USE_MOUSE_OR_TOUCH) && defined(SUPPORT_MOUSE_OR_TOUCH)
 	if (state == SDL_WINDOWEVENT_ENTER) {
 		mouse_focus = true;
@@ -1212,6 +1278,8 @@ int FilterUntilFocus(const SDL_Event* evnt) {
 void Sdl2Ui::vGetConfig(Game_ConfigVideo& cfg) const {
 #ifdef EMSCRIPTEN
 	cfg.renderer.Lock("SDL2 (Software, Emscripten)");
+#elif defined(__wii__)
+	cfg.renderer.Lock("SDL2 (Software, Wii)");
 #elif defined(__WIIU__)
 	cfg.renderer.Lock("SDL2 (Software, Wii U)");
 #else
@@ -1223,7 +1291,6 @@ void Sdl2Ui::vGetConfig(Game_ConfigVideo& cfg) const {
 #endif
 	cfg.fullscreen.SetOptionVisible(true);
 	cfg.fps_limit.SetOptionVisible(true);
-	cfg.fps_render_window.SetOptionVisible(true);
 #if defined(SUPPORT_ZOOM) && !defined(__ANDROID__)
 	// An initial zoom level is needed on Android however changing it looks awful
 	cfg.window_zoom.SetOptionVisible(true);
@@ -1231,6 +1298,7 @@ void Sdl2Ui::vGetConfig(Game_ConfigVideo& cfg) const {
 	cfg.scaling_mode.SetOptionVisible(true);
 	cfg.stretch.SetOptionVisible(true);
 	cfg.game_resolution.SetOptionVisible(true);
+	cfg.pause_when_focus_lost.SetOptionVisible(true);
 
 	cfg.vsync.Set(current_display_mode.vsync);
 	cfg.window_zoom.Set(current_display_mode.zoom);
@@ -1240,15 +1308,18 @@ void Sdl2Ui::vGetConfig(Game_ConfigVideo& cfg) const {
 	// Fullscreen is handled by the browser
 	cfg.fullscreen.SetOptionVisible(false);
 	cfg.fps_limit.SetOptionVisible(false);
-	cfg.fps_render_window.SetOptionVisible(false);
 	cfg.window_zoom.SetOptionVisible(false);
 	// Toggling this freezes the web player
 	cfg.vsync.SetOptionVisible(false);
-#elif defined(__WIIU__)
-	// FIXME: Some options below may crash, better disable for now
+	cfg.pause_when_focus_lost.Lock(false);
+	cfg.pause_when_focus_lost.SetOptionVisible(false);
+#elif defined(__wii__)
 	cfg.fullscreen.SetOptionVisible(false);
-	cfg.window_zoom.SetOptionVisible(false);
-	cfg.vsync.SetOptionVisible(false);
+#elif defined(__WIIU__)
+	// Only makes the screen flicker
+	cfg.fullscreen.SetOptionVisible(false);
+	// WiiU always pauses apps in the background
+	cfg.pause_when_focus_lost.SetOptionVisible(false);
 #endif
 }
 
@@ -1261,4 +1332,23 @@ Rect Sdl2Ui::GetWindowMetrics() const {
 	} else {
 		return window_mode_metrics;
 	}
+}
+
+bool Sdl2Ui::OpenURL(StringView url) {
+#if SDL_VERSION_ATLEAST(2, 0, 14)
+	if (IsFullscreen()) {
+		ToggleFullscreen();
+	}
+
+	if (SDL_OpenURL(ToString(url).c_str()) < 0) {
+		Output::Warning("Open URL {} failed: {}", url, SDL_GetError());
+		return false;
+	}
+
+	return true;
+#else
+	(void)url;
+	Output::Warning("Cannot Open URL: SDL2 version too old (must be 2.0.14)");
+	return false;
+#endif
 }

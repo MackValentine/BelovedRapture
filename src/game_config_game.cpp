@@ -17,6 +17,7 @@
 
 #include "game_config_game.h"
 #include "cmdline_parser.h"
+#include "directory_tree.h"
 #include "filefinder.h"
 #include "options.h"
 #include "output.h"
@@ -85,7 +86,13 @@ void Game_ConfigGame::LoadFromArgs(CmdlineParser& cp) {
 			patch_common_this_event.Lock(false);
 			patch_key_patch.Lock(false);
 			patch_rpg2k3_commands.Lock(false);
-			patch_anti_lag_switch.Lock(false);
+			patch_anti_lag_switch.Lock(0);
+			patch_direct_menu.Lock(0);
+			patch_override = true;
+			continue;
+		}
+		if (cp.ParseNext(arg, 0, {"--patch-easyrpg", "--no-patch-easyrpg"})) {
+			patch_easyrpg.Set(arg.ArgIsOn());
 			patch_override = true;
 			continue;
 		}
@@ -94,8 +101,13 @@ void Game_ConfigGame::LoadFromArgs(CmdlineParser& cp) {
 			patch_override = true;
 			continue;
 		}
-		if (cp.ParseNext(arg, 0, {"--patch-maniac", "--no-patch-maniac"})) {
+		if (cp.ParseNext(arg, 1, {"--patch-maniac", "--no-patch-maniac"})) {
 			patch_maniac.Set(arg.ArgIsOn());
+
+			if (arg.ArgIsOn() && arg.ParseValue(0, li_value)) {
+				patch_maniac.Set(li_value);
+			}
+
 			patch_override = true;
 			continue;
 		}
@@ -119,16 +131,28 @@ void Game_ConfigGame::LoadFromArgs(CmdlineParser& cp) {
 			patch_override = true;
 			continue;
 		}
-		if (cp.ParseNext(arg, 1, "--patch-antilag-switch")) {
-			if (arg.ParseValue(0, li_value)) {
+		if (cp.ParseNext(arg, 1, {"--patch-antilag-switch", "--no-patch-antilag-switch"})) {
+			if (arg.ArgIsOn() && arg.ParseValue(0, li_value)) {
 				patch_anti_lag_switch.Set(li_value);
+				patch_override = true;
+			}
+
+			if (arg.ArgIsOff()) {
+				patch_anti_lag_switch.Set(0);
 				patch_override = true;
 			}
 			continue;
 		}
-		if (cp.ParseNext(arg, 0, "--no-patch-antilag-switch")) {
-			patch_anti_lag_switch.Set(0);
-			patch_override = true;
+		if (cp.ParseNext(arg, 1, {"--patch-direct-menu", "--no-patch-direct-menu"})) {
+			if (arg.ArgIsOn() && arg.ParseValue(0, li_value)) {
+				patch_direct_menu.Set(li_value);
+				patch_override = true;
+			}
+
+			if (arg.ArgIsOff()) {
+				patch_direct_menu.Set(0);
+				patch_override = true;
+			}
 			continue;
 		}
 		if (cp.ParseNext(arg, 6, "--patch")) {
@@ -170,6 +194,10 @@ void Game_ConfigGame::LoadFromStream(Filesystem_Stream::InputStream& is) {
 	engine_str.FromIni(ini);
 	fake_resolution.FromIni(ini);
 
+	if (patch_easyrpg.FromIni(ini)) {
+		patch_override = true;
+	}
+
 	if (patch_dynrpg.FromIni(ini)) {
 		patch_override = true;
 	}
@@ -196,5 +224,52 @@ void Game_ConfigGame::LoadFromStream(Filesystem_Stream::InputStream& is) {
 
 	if (patch_anti_lag_switch.FromIni(ini)) {
 		patch_override = true;
+	}
+
+	if (patch_direct_menu.FromIni(ini)) {
+		patch_override = true;
+	}
+}
+
+void Game_ConfigGame::PrintActivePatches() {
+	std::vector<std::string> patches;
+
+	auto add_bool = [&](auto& patch) {
+		if (patch.Get()) {
+			patches.push_back(ToString(patch.GetName()));
+		}
+	};
+
+	add_bool(patch_easyrpg);
+	add_bool(patch_destiny);
+	add_bool(patch_dynrpg);
+	add_bool(patch_common_this_event);
+	add_bool(patch_unlock_pics);
+	add_bool(patch_key_patch);
+	add_bool(patch_rpg2k3_commands);
+
+	auto add_int = [&](auto& patch) {
+		if (patch.Get() > 0) {
+			patches.push_back(fmt::format("{} ({})", patch.GetName(), patch.Get()));
+		}
+	};
+
+	add_int(patch_maniac);
+	add_int(patch_anti_lag_switch);
+	add_int(patch_direct_menu);
+
+	if (patches.empty()) {
+		Output::Debug("Patch configuration: None");
+	} else {
+		std::string out = "Patch configuration: ";
+		bool first = true;
+		for (const auto& s: patches) {
+			if (!first) {
+				out += ", ";
+			}
+			out += s;
+			first = false;
+		}
+		Output::DebugStr(out);
 	}
 }

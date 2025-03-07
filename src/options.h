@@ -52,21 +52,13 @@
 /** Targeted screen bits per pixel. */
 #define SCREEN_TARGET_BPP 32
 
-/**
- * Pause the game process when the player window
- * looses its focus.
- */
-#define PAUSE_GAME_WHEN_FOCUS_LOST 1
-
-/**
- * Pause the audio process when the player window
- * looses its focus.
- */
-#define PAUSE_AUDIO_WHEN_FOCUS_LOST 1
-
 /** INI configuration filename. */
 #define INI_NAME "RPG_RT.ini"
 #define EASYRPG_INI_NAME "EasyRPG.ini"
+
+#ifndef EASYRPG_CONFIG_NAME
+#  define EASYRPG_CONFIG_NAME "config.ini"
+#endif
 
 /** Prefix for .ldb and .lmt files; used when guessing non-standard extensions. */
 #define RPG_RT_PREFIX "RPG_RT"
@@ -115,7 +107,7 @@
 
 /** Name of the file for output. */
 #ifndef OUTPUT_FILENAME
-#  define OUTPUT_FILENAME "easyrpg_log.txt"
+#  define OUTPUT_FILENAME ORGANIZATION_NAME "-" APPLICATION_NAME ".log"
 #endif
 
 #define USE_KEYBOARD

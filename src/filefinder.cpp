@@ -35,6 +35,7 @@
 #include "system.h"
 #include "options.h"
 #include "utils.h"
+#include "directory_tree.h"
 #include "filefinder.h"
 #include "filefinder_rtp.h"
 #include "filesystem.h"
@@ -57,18 +58,9 @@ namespace {
 	auto MOVIE_TYPES = { ".avi", ".mpg" };
 #endif
 
-	std::string fonts_path;
 	std::shared_ptr<Filesystem> root_fs;
 	FilesystemView game_fs;
 	FilesystemView save_fs;
-
-	constexpr const auto IMG_TYPES = Utils::MakeSvArray(".bmp",  ".png", ".xyz");
-	constexpr const auto MUSIC_TYPES = Utils::MakeSvArray(
-			".opus", ".oga", ".ogg", ".wav", ".mid", ".midi", ".mp3", ".wma");
-	constexpr const auto SOUND_TYPES = Utils::MakeSvArray(
-			".opus", ".oga", ".ogg", ".wav", ".mp3", ".wma");
-	constexpr const auto FONTS_TYPES = Utils::MakeSvArray(".fon", ".fnt", ".bdf", ".ttf", ".ttc", ".otf", ".woff2", ".woff");
-	constexpr const auto TEXT_TYPES = Utils::MakeSvArray(".txt", ".csv", ""); // "" = Complete Filename (incl. extension) provided by the user
 }
 
 FilesystemView FileFinder::Game() {
@@ -320,6 +312,52 @@ bool FileFinder::IsRPG2kProjectWithRenames(const FilesystemView& fs) {
 	return !FileExtGuesser::GetRPG2kProjectWithRenames(fs).Empty();
 }
 
+FileFinder::ProjectType FileFinder::GetProjectType(const FilesystemView &fs) {
+	if (IsValidProject(fs)) {
+		return FileFinder::ProjectType::Supported;
+	}
+
+	DirectoryTree::Args args;
+	args.process_wildcards = true;
+	args.path = "RGSS10??.dll";
+
+	if (!fs.FindFile(args).empty()) {
+		return FileFinder::ProjectType::RpgMakerXp;
+	}
+
+	args.path = "RGSS20??.dll";
+	if (!fs.FindFile(args).empty()) {
+		return FileFinder::ProjectType::RpgMakerVx;
+	}
+
+	args.path = "System/RGSS30?.dll";
+	if (!fs.FindFile(args).empty()) {
+		return FileFinder::ProjectType::RpgMakerVxAce;
+	}
+
+	if (!fs.FindFile("nw.dll").empty()) {
+		return FileFinder::ProjectType::RpgMakerMvMz;
+	}
+
+	if (!fs.FindFile("GuruGuruSMF4.dll").empty()) {
+		return FileFinder::ProjectType::WolfRpgEditor;
+	}
+
+	if (!fs.FindFile("RPG_RT.rs1").empty()) {
+		return FileFinder::ProjectType::Encrypted2k3Maniacs;
+	}
+
+	if (!fs.FindFile("SWNAME.DAT").empty()) {
+		if (!fs.FindFile("GEOLOGY.DAT").empty()) {
+			return FileFinder::ProjectType::SimRpgMaker95;
+		} else if (args.path = "*.RPG"; !fs.FindFile(args).empty()) {
+			return FileFinder::ProjectType::RpgMaker95;
+		}
+	}
+
+	return FileFinder::ProjectType::Unknown;
+}
+
 bool FileFinder::OpenViewToEasyRpgFile(FilesystemView& fs) {
 	auto files = fs.ListDirectory();
 	if (!files) {
@@ -539,4 +577,34 @@ void FileFinder::DumpFilesystem(FilesystemView fs) {
 		Output::Debug("{}: {}", i++, cur_fs.Describe());
 		cur_fs = cur_fs.GetOwner().GetParent();
 	}
+}
+
+std::vector<FileFinder::FsEntry> FileFinder::FindGames(FilesystemView fs, int recursion_limit, int game_limit) {
+	std::vector<FileFinder::FsEntry> games;
+
+	std::function<void(FilesystemView, int)> find_recursive = [&](FilesystemView subfs, int rec_limit) -> void {
+		if (!subfs || rec_limit == 0 || static_cast<int>(games.size()) >= game_limit) {
+			return;
+		}
+
+		auto project_type = GetProjectType(subfs);
+		if (project_type != ProjectType::Unknown) {
+			games.push_back({ subfs, project_type });
+			return;
+		}
+
+		auto entries = subfs.ListDirectory();
+
+		for (auto& [name_lower, entry]: *entries) {
+			if (entry.type == DirectoryTree::FileType::Directory) {
+				find_recursive(subfs.Subtree(entry.name), rec_limit - 1);
+			} else if (entry.type == DirectoryTree::FileType::Regular && IsSupportedArchiveExtension(entry.name)) {
+				find_recursive(fs.Create(entry.name), rec_limit - 1);
+			}
+		}
+	};
+
+	find_recursive(fs, recursion_limit);
+
+	return games;
 }

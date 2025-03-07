@@ -110,6 +110,9 @@ AsyncOp Game_CommonEvent::UpdateBattle(bool resume_async, int ce_ID) {
 	}
 	return {};
 }
+int Game_CommonEvent::GetId() const {
+	return common_event_id;
+}
 
 int Game_CommonEvent::GetIndex() const {
 	return common_event_id;
@@ -140,7 +143,7 @@ std::vector<lcf::rpg::EventCommand>& Game_CommonEvent::GetList() {
 lcf::rpg::SaveEventExecState Game_CommonEvent::GetSaveData() {
 	lcf::rpg::SaveEventExecState state;
 	if (interpreter) {
-		state = interpreter->GetState();
+		state = interpreter->GetSaveState();
 	}
 	if (GetTrigger() == lcf::rpg::EventPage::Trigger_parallel && state.stack.empty()) {
 		// RPG_RT always stores an empty stack frame for parallel events.

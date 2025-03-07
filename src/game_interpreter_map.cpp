@@ -23,6 +23,7 @@
 #include <sstream>
 #include <cassert>
 #include "audio.h"
+#include "feature.h"
 #include "game_map.h"
 #include "game_battle.h"
 #include "game_event.h"
@@ -38,12 +39,20 @@
 #include "sprite_character.h"
 #include "scene_map.h"
 #include "scene_battle.h"
+#include "scene_equip.h"
+#include "scene_item.h"
 #include "scene_menu.h"
+#include "scene_order.h"
 #include "scene_save.h"
+#include "scene_status.h"
+#include "scene_skill.h"
 #include "scene_load.h"
 #include "scene_name.h"
 #include "scene_shop.h"
+#include "scene_debug.h"
 #include "scene_gameover.h"
+#include "scene_settings.h"
+#include "scene_language.h"
 #include "scene.h"
 #include "graphics.h"
 #include "input.h"
@@ -70,6 +79,8 @@ enum InnSubcommand {
 	eOptionInnNoStay = 1,
 };
 
+using namespace Game_Interpreter_Shared;
+
 void Game_Interpreter_Map::SetState(const lcf::rpg::SaveEventExecState& save) {
 	Clear();
 	_state = save;
@@ -81,6 +92,89 @@ void Game_Interpreter_Map::OnMapChange() {
 	for (auto& frame: _state.stack) {
 		frame.event_id = 0;
 	}
+
+	// When the message was created by a parallel process, close it
+	if (Game_Message::IsMessageActive() && !Game_Message::GetWindow()->GetPendingMessage().IsFromForegroundInterpreter()) {
+		Game_Message::GetWindow()->FinishMessageProcessing();
+	}
+}
+
+bool Game_Interpreter_Map::RequestMainMenuScene(int subscreen_id, int actor_index, bool is_db_actor) {
+	if (Player::game_config.patch_direct_menu.Get() && subscreen_id == -1) {
+		subscreen_id = Main_Data::game_variables->Get(Player::game_config.patch_direct_menu.Get());
+		actor_index = Main_Data::game_variables->Get(Player::game_config.patch_direct_menu.Get() + 1);
+		// When true refers to the index of an actor, instead of a party index
+		is_db_actor = (actor_index < 0);
+		actor_index = std::abs(actor_index);
+	}
+
+	std::vector<Game_Actor*> actors;
+
+	switch (subscreen_id)
+	{
+	case 1: // Inventory
+		Scene::instance->SetRequestedScene(std::make_shared<Scene_Item>());
+		return true;
+	case 2: // Skills
+	case 3: // Equipment
+	case 4: // Status
+		if (is_db_actor) {
+			Game_Actor* actor = Main_Data::game_actors->GetActor(actor_index);
+			if (!actor) {
+				Output::Warning("RequestMainMenu: Invalid actor ID {}", actor_index);
+				return false;
+			}
+			actors = std::vector{actor};
+			actor_index = 0;
+		} else {
+			// 0, 1 and 5+ refer to the first actor
+			if (actor_index == 0 || actor_index > 4) {
+				actor_index = 1;
+			}
+			actor_index--;
+			actors = Main_Data::game_party->GetActors();
+
+			if (actor_index < 0 || actor_index >= static_cast<int>(actors.size())) {
+				Output::Warning("RequestMainMenu: Invalid actor party member {}", actor_index);
+				return false;
+			}
+		}
+
+		if (subscreen_id == 2) {
+			Scene::instance->SetRequestedScene(std::make_shared<Scene_Skill>(actors, actor_index));
+		}
+		else if (subscreen_id == 3) {
+			Scene::instance->SetRequestedScene(std::make_shared<Scene_Equip>(actors, actor_index));
+		}
+		else if (subscreen_id == 4) {
+			Scene::instance->SetRequestedScene(std::make_shared<Scene_Status>(actors, actor_index));
+		}
+		return true;
+	case 5: // Order
+		if (!Feature::HasRow()) {
+			break;
+		}
+
+		if (Main_Data::game_party->GetActors().size() <= 1) {
+			Output::Warning("Party size must exceed '1' for 'Order' subscreen to be opened");
+			return false;
+		}
+		else {
+			Scene::instance->SetRequestedScene(std::make_shared<Scene_Order>());
+			return true;
+		}
+	case 6: // Settings
+		Scene::instance->SetRequestedScene(std::make_shared<Scene_Settings>());
+		return true;
+	case 7: // Language
+		if (Player::translation.HasTranslations()) {
+			Scene::instance->SetRequestedScene(std::make_shared<Scene_Language>());
+		}
+		return true;
+	}
+
+	Scene::instance->SetRequestedScene(std::make_shared<Scene_Menu>());
+	return true;
 }
 
 /**
@@ -89,61 +183,67 @@ void Game_Interpreter_Map::OnMapChange() {
 bool Game_Interpreter_Map::ExecuteCommand(lcf::rpg::EventCommand const& com) {
 	switch (static_cast<Cmd>(com.code)) {
 		case Cmd::RecallToLocation:
-			return CommandRecallToLocation(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandRecallToLocation, 3>(com);
 		case Cmd::EnemyEncounter:
-			return CommandEnemyEncounter(com);
+			if (Player::IsRPG2k()) {
+				return CmdSetup<&Game_Interpreter_Map::CommandEnemyEncounter, 6>(com);
+			} else {
+				return CmdSetup<&Game_Interpreter_Map::CommandEnemyEncounter, 10>(com);
+			}
 		case Cmd::VictoryHandler:
-			return CommandVictoryHandler(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandVictoryHandler, 0>(com);
 		case Cmd::EscapeHandler:
-			return CommandEscapeHandler(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandEscapeHandler, 0>(com);
 		case Cmd::DefeatHandler:
-			return CommandDefeatHandler(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandDefeatHandler, 0>(com);
 		case Cmd::EndBattle:
-			return CommandEndBattle(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandEndBattle, 0>(com);
 		case Cmd::OpenShop:
-			return CommandOpenShop(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandOpenShop, 4>(com);
 		case Cmd::Transaction:
-			return CommandTransaction(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandTransaction, 0>(com);
 		case Cmd::NoTransaction:
-			return CommandNoTransaction(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandNoTransaction, 0>(com);
 		case Cmd::EndShop:
-			return CommandEndShop(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandEndShop, 0>(com);
 		case Cmd::ShowInn:
-			return CommandShowInn(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandShowInn, 3>(com);
 		case Cmd::Stay:
-			return CommandStay(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandStay, 0>(com);
 		case Cmd::NoStay:
-			return CommandNoStay(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandNoStay, 0>(com);
 		case Cmd::EndInn:
-			return CommandEndInn(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandEndInn, 0>(com);
 		case Cmd::EnterHeroName:
-			return CommandEnterHeroName(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandEnterHeroName, 3>(com);
 		case Cmd::Teleport:
-			return CommandTeleport(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandTeleport, 3>(com);
 		case Cmd::EnterExitVehicle:
-			return CommandEnterExitVehicle(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandEnterExitVehicle, 0>(com);
 		case Cmd::PanScreen:
-			return CommandPanScreen(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandPanScreen, 5>(com);
 		case Cmd::ShowBattleAnimation:
-			return CommandShowBattleAnimation(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandShowBattleAnimation, 4>(com);
 		case Cmd::FlashSprite:
-			return CommandFlashSprite(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandFlashSprite, 7>(com);
 		case Cmd::ProceedWithMovement:
-			return CommandProceedWithMovement(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandProceedWithMovement, 0>(com);
 		case Cmd::HaltAllMovement:
-			return CommandHaltAllMovement(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandHaltAllMovement, 0>(com);
 		case Cmd::PlayMovie:
-			return CommandPlayMovie(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandPlayMovie, 5>(com);
 		case Cmd::OpenSaveMenu:
-			return CommandOpenSaveMenu(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandOpenSaveMenu, 0>(com);
 		case Cmd::OpenMainMenu:
-			return CommandOpenMainMenu(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandOpenMainMenu, 0>(com);
 		case Cmd::OpenLoadMenu:
-			return CommandOpenLoadMenu(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandOpenLoadMenu, 0>(com);
 		case Cmd::ToggleAtbMode:
-			return CommandToggleAtbMode(com);
-		case static_cast <Game_Interpreter::Cmd>(2002): // Cmd::EasyRpg_TriggerEventAt
-			return CommandEasyRpgTriggerEventAt(com);
+			return CmdSetup<&Game_Interpreter_Map::CommandToggleAtbMode, 0>(com);
+		case Cmd::EasyRpg_TriggerEventAt:
+			return CmdSetup<&Game_Interpreter_Map::CommandEasyRpgTriggerEventAt, 4>(com);
+		case Cmd::EasyRpg_WaitForSingleMovement:
+			return CmdSetup<&Game_Interpreter_Map::CommandEasyRpgWaitForSingleMovement, 6>(com);
 		default:
 			return Game_Interpreter::ExecuteCommand(com);
 	}
@@ -180,12 +280,12 @@ bool Game_Interpreter_Map::CommandRecallToLocation(lcf::rpg::EventCommand const&
 }
 
 bool Game_Interpreter_Map::CommandEnemyEncounter(lcf::rpg::EventCommand const& com) { // code 10710
-	auto& frame = GetFrame();
-	auto& index = frame.current_command;
-
 	if (Game_Message::IsMessageActive()) {
 		return false;
 	}
+
+	auto& frame = GetFrame();
+	auto& index = frame.current_command;
 
 	BattleArgs args;
 
@@ -277,12 +377,12 @@ bool Game_Interpreter_Map::CommandEndBattle(lcf::rpg::EventCommand const& /* com
 }
 
 bool Game_Interpreter_Map::CommandOpenShop(lcf::rpg::EventCommand const& com) { // code 10720
-	auto& frame = GetFrame();
-	auto& index = frame.current_command;
-
 	if (Game_Message::IsMessageActive()) {
 		return false;
 	}
+
+	auto& frame = GetFrame();
+	auto& index = frame.current_command;
 
 	bool allow_buy = false;
 	bool allow_sell = false;
@@ -305,7 +405,7 @@ bool Game_Interpreter_Map::CommandOpenShop(lcf::rpg::EventCommand const& com) { 
 	auto shop_type = com.parameters[1];
 
 	// Not used, but left here for documentation purposes
-	//bool has_shop_handlers = com.parameters[2] != 0;
+	// bool has_shop_handlers = com.parameters[2] != 0;
 
 	std::vector<int> goods;
 	for (auto it = com.parameters.begin() + 4; it < com.parameters.end(); ++it) {
@@ -365,6 +465,7 @@ bool Game_Interpreter_Map::CommandShowInn(lcf::rpg::EventCommand const& com) { /
 	}
 
 	PendingMessage pm(Game_Message::CommandCodeInserter);
+	pm.SetFromForegroundInterpreter(main_flag);
 
 	StringView greeting_1, greeting_2, greeting_3, accept, cancel;
 
@@ -455,18 +556,24 @@ bool Game_Interpreter_Map::CommandEndInn(lcf::rpg::EventCommand const& /* com */
 }
 
 bool Game_Interpreter_Map::CommandEnterHeroName(lcf::rpg::EventCommand const& com) { // code 10740
-	auto& frame = GetFrame();
-	auto& index = frame.current_command;
-
 	if (Game_Message::IsMessageActive()) {
 		return false;
 	}
+
+	auto& frame = GetFrame();
+	auto& index = frame.current_command;
 
 	auto actor_id = com.parameters[0];
 	auto charset = com.parameters[1];
 	auto use_default_name = com.parameters[2];
 
-	auto scene = std::make_shared<Scene_Name>(actor_id, charset, use_default_name);
+	Game_Actor* actor = Main_Data::game_actors->GetActor(actor_id);
+	if (!actor) {
+		Output::Warning("EnterHeroName: Invalid actor ID {}", actor_id);
+		return true;
+	}
+
+	auto scene = std::make_shared<Scene_Name>(*actor, charset, use_default_name);
 	Scene::instance->SetRequestedScene(std::move(scene));
 
 	++index;
@@ -545,6 +652,38 @@ bool Game_Interpreter_Map::CommandPanScreen(lcf::rpg::EventCommand const& com) {
 		break;
 	}
 
+	if (Player::IsPatchManiac() && com.parameters.size() > 5) {
+		// Pixel scrolling with h/v offsets
+		bool centered = false; // absolute from default pan (centered on hero)
+		bool relative = false; // relative to current camera
+		int h = ValueOrVariableBitfield(com, 1, 0, 2);
+		int v = ValueOrVariableBitfield(com, 1, 1, 3);
+		waiting_pan_screen = (com.parameters[4] & 0x01) != 0;
+		speed = ValueOrVariableBitfield(com, 1, 2, 5);
+		switch (com.parameters[0]) {
+		case 4: // Relative Pixel Pan (speed)
+			centered = false;
+			relative = true;
+			player.StartPixelPan(h, v, speed, false, centered, relative);
+			break;
+		case 5: // Relative Pixel Pan (interpolated)
+			centered = false;
+			relative = true;
+			player.StartPixelPan(h, v, speed, true, centered, relative);
+			break;
+		case 6: // Absolute Pixel Pan (speed)
+			centered = (com.parameters[4] & 0x02) != 0;
+			relative = (com.parameters[4] & 0x04) != 0;
+			player.StartPixelPan(h, v, speed, false, centered, relative);
+			break;
+		case 7: // Absolute Pixel Pan (interpolated)
+			centered = (com.parameters[4] & 0x02) != 0;
+			relative = (com.parameters[4] & 0x04) != 0;
+			player.StartPixelPan(h, v, speed, true, centered, relative);
+			break;
+		}
+	}
+
 	if (waiting_pan_screen) {
 		// RPG_RT uses the max wait for all pending pan commands, not just the current one.
 		_state.wait_time = player.GetPanWait();
@@ -559,7 +698,7 @@ bool Game_Interpreter_Map::CommandShowBattleAnimation(lcf::rpg::EventCommand con
 	bool waiting_battle_anim = com.parameters[2] > 0;
 	bool global = com.parameters[3] > 0;
 
-	Game_Character* chara = GetCharacter(evt_id);
+	Game_Character* chara = GetCharacter(evt_id, "ShowBattleAnimation");
 	if (chara == NULL)
 		return true;
 
@@ -576,15 +715,15 @@ bool Game_Interpreter_Map::CommandShowBattleAnimation(lcf::rpg::EventCommand con
 }
 
 bool Game_Interpreter_Map::CommandFlashSprite(lcf::rpg::EventCommand const& com) { // code 11320
-	int event_id = com.parameters[0];
-	int r = com.parameters[1];
-	int g = com.parameters[2];
-	int b = com.parameters[3];
-	int p = com.parameters[4];
+	int event_id = ValueOrVariableBitfield(com, 7, 0, 0);
+	int r = ValueOrVariableBitfield(com, 7, 1, 1);
+	int g = ValueOrVariableBitfield(com, 7, 2, 2);
+	int b = ValueOrVariableBitfield(com, 7, 3, 3);
+	int p = ValueOrVariableBitfield(com, 7, 4, 4);
 
 	int tenths = com.parameters[5];
 	bool wait = com.parameters[6] > 0;
-	Game_Character* event = GetCharacter(event_id);
+	Game_Character* event = GetCharacter(event_id, "FlashSprite");
 
 	if (event != NULL) {
 		event->Flash(r, g, b, p, tenths * DEFAULT_FPS / 10);
@@ -625,30 +764,83 @@ bool Game_Interpreter_Map::CommandPlayMovie(lcf::rpg::EventCommand const& com) {
 	return true;
 }
 
-bool Game_Interpreter_Map::CommandOpenSaveMenu(lcf::rpg::EventCommand const& /* com */) { // code 11910
-	auto& frame = GetFrame();
-	auto& index = frame.current_command;
-
+bool Game_Interpreter_Map::CommandOpenSaveMenu(lcf::rpg::EventCommand const& com) { // code 11910
 	if (Game_Message::IsMessageActive()) {
 		return false;
 	}
+
+	auto& frame = GetFrame();
+	auto& index = frame.current_command;
 
 	Scene::instance->SetRequestedScene(std::make_shared<Scene_Save>());
-	++index;
-	return false;
+
+	int current_system_function = 0;
+	if (com.parameters.size() > 0) {
+		current_system_function = com.parameters[0];
+	}
+
+	// Handle save menu (default behavior)
+	if (!Player::IsPatchManiac() || current_system_function <= 0) {
+		Scene::instance->SetRequestedScene(std::make_shared<Scene_Save>());
+		++index;
+		return false;
+	}
+
+	// Command "Call System Functions"
+	switch (current_system_function) {
+	case 1: // Load menu
+		return CmdSetup<&Game_Interpreter_Map::CommandOpenLoadMenu, 100>(com);
+	case 2: // Game menu
+		return CmdSetup<&Game_Interpreter_Map::CommandOpenMainMenu, 100>(com);
+	case 3: // Toggle fullscreen
+		// TODO Implement fullscreen mode once maniacs supports it
+		// const int fullscreen_mode = com.parameters[1]; // Broken in Maniac.
+		return CmdSetup<&Game_Interpreter_Map::CommandToggleFullscreen, 100>(com);
+	case 4: // Settings menu
+		return CmdSetup<&Game_Interpreter_Map::CommandOpenVideoOptions, 100>(com);
+	case 5: // Debug menu
+		// const int pause_while_debugging = com.parameters[1]; // unused in our ingame debug screen.
+		Scene::instance->SetRequestedScene(std::make_shared<Scene_Debug>());
+		++index;
+		return false;
+	case 6: // License information menu
+		// TODO Implement license information menu
+		return true;
+	case 7: // Reset game
+		return CmdSetup<&Game_Interpreter_Map::CommandReturnToTitleScreen, 100>(com);
+	default:
+		if (Player::HasEasyRpgExtensions() && current_system_function >= 200 && current_system_function < 210) {
+			const int actor_index = ValueOrVariable(com.parameters[1], com.parameters[2]);
+			const bool is_db_actor = ValueOrVariable(com.parameters[3], com.parameters[4]);
+
+			if (RequestMainMenuScene(current_system_function - 200, actor_index, is_db_actor)) {
+				++index;
+				return false;
+			}
+		} else {
+			Output::Warning("CommandOpenSaveMenu: Unsupported scene {}", current_system_function);
+		}
+	}
+
+	return true;
 }
 
-bool Game_Interpreter_Map::CommandOpenMainMenu(lcf::rpg::EventCommand const& /* com */) { // code 11950
-	auto& frame = GetFrame();
-	auto& index = frame.current_command;
-
+bool Game_Interpreter_Map::CommandOpenMainMenu(lcf::rpg::EventCommand const&) { // code 11950
 	if (Game_Message::IsMessageActive()) {
 		return false;
 	}
 
-	Scene::instance->SetRequestedScene(std::make_shared<Scene_Menu>());
-	++index;
-	return false;
+	auto& frame = GetFrame();
+	auto& index = frame.current_command;
+
+	int subscreen_id = -1, actor_index = 0;
+	bool is_db_actor = false;
+
+	if (RequestMainMenuScene(subscreen_id, actor_index, is_db_actor)) {
+		++index;
+		return false;
+	}
+	return true;
 }
 
 bool Game_Interpreter_Map::CommandOpenLoadMenu(lcf::rpg::EventCommand const& /* com */) {
@@ -656,12 +848,12 @@ bool Game_Interpreter_Map::CommandOpenLoadMenu(lcf::rpg::EventCommand const& /* 
 		return true;
 	}
 
-	auto& frame = GetFrame();
-	auto& index = frame.current_command;
-
 	if (Game_Message::IsMessageActive()) {
 		return false;
 	}
+
+	auto& frame = GetFrame();
+	auto& index = frame.current_command;
 
 	Scene::instance->SetRequestedScene(std::make_shared<Scene_Load>());
 	++index;
@@ -678,10 +870,75 @@ bool Game_Interpreter_Map::CommandToggleAtbMode(lcf::rpg::EventCommand const& /*
 }
 
 bool Game_Interpreter_Map::CommandEasyRpgTriggerEventAt(lcf::rpg::EventCommand const& com) {
+	if (!Player::HasEasyRpgExtensions()) {
+		return true;
+	}
+
 	int x = ValueOrVariable(com.parameters[0], com.parameters[1]);
 	int y = ValueOrVariable(com.parameters[2], com.parameters[3]);
 
-	Main_Data::game_player->TriggerEventAt(x, y);
+	// backwards compatible with old (shorter) command
+	bool face_player = true;
+
+	if (com.parameters.size() > 4) {
+		int flags = com.parameters[4];
+		face_player = (flags & 1) > 0;
+	}
+
+	Main_Data::game_player->TriggerEventAt(x, y, GetFrame().triggered_by_decision_key, face_player);
+
+	return true;
+}
+
+bool Game_Interpreter_Map::CommandEasyRpgWaitForSingleMovement(lcf::rpg::EventCommand const& com) {
+	if (!Player::HasEasyRpgExtensions()) {
+		return true;
+	}
+
+	_state.easyrpg_parameters.resize(3);
+
+	auto& event_id = _state.easyrpg_parameters[0];
+	auto& failure_limit = _state.easyrpg_parameters[1];
+	auto& output_var = _state.easyrpg_parameters[2];
+
+	if (!_state.easyrpg_active) {
+		event_id = ValueOrVariable(com.parameters[0], com.parameters[1]);
+		failure_limit = ValueOrVariable(com.parameters[2], com.parameters[3]);
+		output_var = ValueOrVariable(com.parameters[4], com.parameters[5]);
+	}
+
+	_state.easyrpg_active = false;
+
+	Game_Character* chara = GetCharacter(event_id, "EasyRpgWaitForSingleMovement");
+	if (chara == nullptr) {
+		return true;
+	}
+
+	bool exists = chara->IsMoveRouteOverwritten();
+	bool finished = chara->IsMoveRouteFinished();
+
+	if (!exists || (exists && finished)) {
+		if (output_var > 0) {
+			// Move route inexistant or ended: Report success (1)
+			Main_Data::game_variables->Set(output_var, 1);
+			Game_Map::SetNeedRefresh(true);
+		}
+		return true;
+	}
+
+	// !finished
+	if (failure_limit == 0 || chara->GetMoveFailureCount() < failure_limit) {
+		// Below threshold: Yield
+		_state.easyrpg_active = true;
+		return false;
+	}
+
+	// Cancel move route and report abort (0)
+	chara->CancelMoveRoute();
+	if (output_var > 0) {
+		Main_Data::game_variables->Set(output_var, 0);
+		Game_Map::SetNeedRefresh(true);
+	}
 
 	return true;
 }

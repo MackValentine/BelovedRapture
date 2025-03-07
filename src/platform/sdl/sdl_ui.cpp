@@ -29,7 +29,7 @@
 #include "bitmap.h"
 
 #ifdef SUPPORT_AUDIO
-#  ifdef __wii__
+#  if AUDIO_AESND
 #    include "platform/wii/audio.h"
 #  else
 #    include "sdl_audio.h"
@@ -167,7 +167,7 @@ SdlUi::SdlUi(long width, long height, const Game_Config& cfg) : BaseUi(cfg)
 
 #ifdef SUPPORT_AUDIO
 	if (!Player::no_audio_flag) {
-#  ifdef __wii__
+#  ifdef AUDIO_AESND
 		audio_ = std::make_unique<WiiAudio>(cfg.audio);
 #  else
 		audio_ = std::make_unique<SdlAudio>(cfg.audio);
@@ -181,6 +181,10 @@ SdlUi::~SdlUi() {
 	if (main_surface_sdl) {
 		SDL_FreeSurface(main_surface_sdl);
 	}
+
+#ifdef SUPPORT_AUDIO
+	audio_.reset();
+#endif
 
 	SDL_Quit();
 }
@@ -404,7 +408,7 @@ void SdlUi::ToggleZoom() {
 	EndDisplayModeChange();
 }
 
-void SdlUi::ProcessEvents() {
+bool SdlUi::ProcessEvents() {
 	SDL_Event evnt;
 
 	// Poll SDL events and process them
@@ -414,6 +418,8 @@ void SdlUi::ProcessEvents() {
 		if (Player::exit_flag)
 			break;
 	}
+
+	return true;
 }
 
 void SdlUi::UpdateDisplay() {
@@ -478,8 +484,11 @@ void SdlUi::ProcessActiveEvent(SDL_Event &evnt) {
 	int state;
 	state = evnt.active.state;
 
-#if PAUSE_GAME_WHEN_FOCUS_LOST
 	if (state == SDL_APPINPUTFOCUS && !evnt.active.gain) {
+		if (!vcfg.pause_when_focus_lost.Get()) {
+			return;
+		}
+
 		Player::Pause();
 
 		bool last = ShowCursor(true);
@@ -500,7 +509,6 @@ void SdlUi::ProcessActiveEvent(SDL_Event &evnt) {
 
 		return;
 	}
-#endif
 }
 
 void SdlUi::ProcessKeyDownEvent(SDL_Event &evnt) {
@@ -747,6 +755,8 @@ void SdlUi::vGetConfig(Game_ConfigVideo& cfg) const {
 #endif
 
 	cfg.fullscreen.SetOptionVisible(toggle_fs_available);
+	cfg.pause_when_focus_lost.SetOptionVisible(toggle_fs_available);
+
 #ifdef SUPPORT_ZOOM
 	cfg.window_zoom.SetOptionVisible(true);
 	cfg.window_zoom.Set(current_display_mode.zoom);

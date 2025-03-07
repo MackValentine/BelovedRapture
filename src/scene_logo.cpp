@@ -25,7 +25,6 @@
 #include "input.h"
 #include "options.h"
 #include "player.h"
-#include "scene_title.h"
 #include "scene_gamebrowser.h"
 #include "scene_settings.h"
 #include "output.h"
@@ -63,6 +62,8 @@ void Scene_Logo::Start() {
 
 void Scene_Logo::vUpdate() {
 	if (current_logo_index == 0 && frame_counter == 0) {
+		Font::ResetDefault();
+
 		if (!DetectGame()) {
 			// async delay for emscripten
 			return;
@@ -100,10 +101,8 @@ void Scene_Logo::vUpdate() {
 				}
 			}
 
-			if (!Player::startup_language.empty()) {
-				Player::translation.SelectLanguage(Player::startup_language);
-			}
-			Scene::Push(std::make_shared<Scene_Title>(), true);
+			Scene::PushTitleScene(true);
+
 			if (Player::load_game_id > 0) {
 				auto save = FileFinder::Save();
 
@@ -211,7 +210,7 @@ void Scene_Logo::DrawTextOnLogo(bool verbose) {
 }
 
 std::vector<std::vector<uint8_t>> Scene_Logo::LoadLogos() {
-	if (Player::player_config.show_startup_logos.Get() == StartupLogos::None) {
+	if (Player::player_config.show_startup_logos.Get() == ConfigEnum::StartupLogos::None) {
 		return {};
 	}
 

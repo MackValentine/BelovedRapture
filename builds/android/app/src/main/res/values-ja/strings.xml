@@ -40,12 +40,7 @@
     <string name="report_bug_msg">この機能は、私たちにバグ報告を送信するためにメールプログラム (例えば Gmail) を開きます。
 \n
 \nメールを送信したくないか、メールプログラムを持っていない場合は、代わりに https://github.com/EasyRPG/Player/issues instead で新しい問題を開くことができます。</string>
-    <string name="report_bug_mail">EasyRPG プレーヤーをご支援いただきありがとうございます。
-\n ログファイルとセーブしたゲームが、このメールに添付されました。
-\n ログファイルを削除しないでください! 私たちが、バグの箇所に近づくためにセーブデータが必要です。
-\n 何の問題があったのかを詳細に教えてください。
-\n
-\n</string>
+    <string name="report_bug_mail">EasyRPG プレーヤーをご支援いただきありがとうございます。 \n ログファイルとセーブしたゲームが、このメールに添付されました。 \n ログファイルを削除しないでください! 私たちが、バグの箇所に近づくためにセーブデータが必要です。 \n 何の問題があったのかを詳細に教えてください。</string>
     <!--Settings Activities-->
     <string name="video">ビデオ</string>
     <string name="audio">オーディオ</string>
@@ -99,4 +94,8 @@
     <string name="error_saf_select_easyrpg">EasyRPGのアプリで使用する専用の空フォルダーを作成し、アプリ内で設定してください。</string>
     <string name="fast_forward_mode_hold">ホールド</string>
     <string name="fast_forward_mode_tap">タップ</string>
+    <string name="how_to_use_easy_rpg_explanation_android_30">RPG Maker 2000/2003 ゲームを「games」フォルダーのサブディレクトリに置きます。 ゲームは解凍するか、ZIP アーカイブにする必要があります。 RAR、LZH、EXE ファイルはサポートされていません。 オプション機能 (設定を参照してください): - RTP（一部のゲームで使用される共有アセット）の提供が可能 - MIDI音楽のサウンドを変更するカスタムサウンドフォントを提供可能</string>
+    <string name="launch_debug_mode">デバッグモードで起動</string>
+    <string name="error_no_games_folder">\" games \"フォルダが存在しないか、フォルダになっていません。手動で作成するか、\" EasyRPG \"フォルダの別の場所を選択してください。\" EasyRPG \"フォルダは設定で変更できます。</string>
+    <string name="error_games_no_rw">\" games \"フォルダが読み書きできません。\" EasyRPG \"フォルダは別の場所を選択してください。\" EasyRPG \"フォルダは設定で変更できます。</string>
 </resources>

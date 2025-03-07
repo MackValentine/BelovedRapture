@@ -61,6 +61,8 @@ public:
 
 	void vGetConfig(Game_ConfigAudio&) const override {}
 
+	GenericAudioMidiOut* CreateAndGetMidiOut() override;
+
 	void SetFormat(int frequency, AudioDecoder::Format format, int channels);
 
 	virtual void LockMutex() const = 0;
@@ -107,7 +109,6 @@ private:
 	BgmChannel BGM_Channels[nr_of_bgm_channels];
 	SeChannel SE_Channels[nr_of_se_channels];
 	mutable bool BGM_PlayedOnceIndicator;
-	bool Muted;
 
 	std::vector<int16_t> sample_buffer = {};
 	std::vector<uint8_t> scrap_buffer = {};

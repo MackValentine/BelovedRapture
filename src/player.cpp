@@ -16,7 +16,6 @@
  */
 
 // Headers
-
 #include <algorithm>
 #include <cstring>
 #include <cstdlib>
@@ -24,7 +23,6 @@
 #include <iomanip>
 #include <fstream>
 #include <memory>
-#include <thread>
 
 #ifdef _WIN32
 #  include "platform/windows/utils.h"
@@ -38,12 +36,14 @@
 #include "cache.h"
 #include "rand.h"
 #include "cmdline_parser.h"
-#include "dynrpg.h"
+#include "game_dynrpg.h"
 #include "filefinder.h"
 #include "filefinder_rtp.h"
 #include "fileext_guesser.h"
+#include "filesystem_hook.h"
 #include "game_actors.h"
 #include "game_battle.h"
+#include "game_destiny.h"
 #include "game_map.h"
 #include "game_message.h"
 #include "game_enemyparty.h"
@@ -80,16 +80,14 @@
 #include "instrumentation.h"
 #include "transition.h"
 #include <lcf/scope_guard.h>
+#include <lcf/log_handler.h>
 #include "baseui.h"
 #include "game_clock.h"
 #include "message_overlay.h"
+#include "audio_midi.h"
 
 #ifdef __ANDROID__
 #include "platform/android/android.h"
-#endif
-
-#if defined(HAVE_FLUIDSYNTH) || defined(HAVE_FLUIDLITE)
-#include "decoder_fluidsynth.h"
 #endif
 
 #ifndef EMSCRIPTEN
@@ -106,9 +104,9 @@ namespace Player {
 	int menu_offset_y = (screen_height - MENU_HEIGHT) / 2;
 	int message_box_offset_x = (screen_width - MENU_WIDTH) / 2;
 	bool has_custom_resolution = false;
-
-	bool exit_flag;
-	bool reset_flag;
+	int exit_code = EXIT_SUCCESS;
+	bool exit_flag = false;
+	bool reset_flag = false;
 	bool debug_flag;
 	bool hide_title_flag;
 	int load_game_id;
@@ -124,6 +122,7 @@ namespace Player {
 	std::string escape_symbol;
 	uint32_t escape_char;
 	std::string game_title;
+	std::string game_title_original;
 	std::shared_ptr<Meta> meta;
 	FileExtGuesser::RPG2KFileExtRemap fileext_map;
 	std::string startup_language;
@@ -154,6 +153,10 @@ namespace {
 }
 
 void Player::Init(std::vector<std::string> args) {
+	lcf::LogHandler::SetHandler([](lcf::LogHandler::Level level, StringView message, lcf::LogHandler::UserData) {
+		Output::Debug("lcf ({}): {}", lcf::LogHandler::kLevelTags.tag(level), message);
+	});
+
 	frames = 0;
 
 	// Must be called before the first call to Output
@@ -232,10 +235,22 @@ void Player::MainLoop() {
 
 	Player::UpdateInput();
 
+	if (!DisplayUi->ProcessEvents()) {
+		Scene::PopUntil(Scene::Null);
+		Player::Exit();
+		return;
+	}
+
 	int num_updates = 0;
 	while (Game_Clock::NextGameTimeStep()) {
 		if (num_updates > 0) {
 			Player::UpdateInput();
+
+			if (!DisplayUi->ProcessEvents()) {
+				Scene::PopUntil(Scene::Null);
+				Player::Exit();
+				return;
+			}
 		}
 
 		Scene::old_instances.clear();
@@ -309,9 +324,6 @@ void Player::UpdateInput() {
 	if (Main_Data::game_quit) {
 		reset_flag |= Main_Data::game_quit->ShouldQuit();
 	}
-
-	// Update Logic:
-	DisplayUi->ProcessEvents();
 }
 
 void Player::Update(bool update_scene) {
@@ -404,7 +416,6 @@ void Player::Exit() {
 #endif
 	Player::ResetGameObjects();
 	Font::Dispose();
-	DynRpg::Reset();
 	Graphics::Quit();
 	Output::Quit();
 	FileFinder::Quit();
@@ -639,14 +650,6 @@ Game_Config Player::ParseCommandLine() {
 			}
 			continue;
 		}
-#if defined(HAVE_FLUIDSYNTH) || defined(HAVE_FLUIDLITE)
-		if (cp.ParseNext(arg, 1, "--soundfont")) {
-			if (arg.NumValues() > 0) {
-				FluidSynthDecoder::SetSoundfont(arg.Value(0));
-			}
-			continue;
-		}
-#endif
 		if (cp.ParseNext(arg, 0, "--version", 'v')) {
 			std::cout << GetFullVersionString() << std::endl;
 			exit(0);
@@ -676,6 +679,9 @@ void Player::CreateGameObjects() {
 	CmdlineParser cp(arguments);
 	game_config = Game_ConfigGame::Create(cp);
 
+	// Reinit MIDI
+	MidiDecoder::Reset();
+
 	// Load the meta information file.
 	// Note: This should eventually be split across multiple folders as described in Issue #1210
 	std::string meta_file = FileFinder::Game().FindFile(META_NAME);
@@ -690,6 +696,9 @@ void Player::CreateGameObjects() {
 		Output::Error("Invalid encoding: {}.", encoding);
 	}
 	escape_char = Utils::DecodeUTF32(Player::escape_symbol).front();
+
+	// Special handling for games with altered files
+	FileFinder::SetGameFilesystem(HookFilesystem::Detect(FileFinder::Game()));
 
 	// Check for translation-related directories and load language names.
 	translation.InitTranslations();
@@ -729,16 +738,7 @@ void Player::CreateGameObjects() {
 		}
 	}
 
-	std::stringstream title;
-	if (!game_title.empty()) {
-		Output::Debug("Loading game {}", game_title);
-		title << game_title << " - ";
-		Input::AddRecordingData(Input::RecordingData::GameTitle, game_title);
-	} else {
-		Output::Debug("Could not read game title.");
-	}
-	title << GAME_TITLE;
-	DisplayUi->SetTitle(title.str());
+	UpdateTitle(game_title);
 
 	if (no_rtp_warning_flag) {
 		Output::Debug("Game does not need RTP (FullPackageFlag=1)");
@@ -817,16 +817,19 @@ void Player::CreateGameObjects() {
 
 		if (!FileFinder::Game().FindFile("dynloader.dll").empty()) {
 			game_config.patch_dynrpg.Set(true);
-			Output::Warning("This game uses DynRPG and will not run properly.");
+			Output::Debug("This game uses DynRPG. Depending on the plugins used it will not run properly.");
 		}
 
 		if (!FileFinder::Game().FindFile("accord.dll").empty()) {
 			game_config.patch_maniac.Set(true);
 		}
+
+		if (!FileFinder::Game().FindFile(DESTINY_DLL).empty()) {
+			game_config.patch_destiny.Set(true);
+		}
 	}
 
-	Output::Debug("Patch configuration: dynrpg={} maniac={} key-patch={} common-this={} pic-unlock={} 2k3-commands={} anti-lag-switch={}",
-		Player::IsPatchDynRpg(), Player::IsPatchManiac(), Player::IsPatchKeyPatch(), game_config.patch_common_this_event.Get(), game_config.patch_unlock_pics.Get(), game_config.patch_rpg2k3_commands.Get(), game_config.patch_anti_lag_switch.Get());
+	game_config.PrintActivePatches();
 
 	ResetGameObjects();
 
@@ -835,6 +838,32 @@ void Player::CreateGameObjects() {
 	if (Player::IsPatchKeyPatch()) {
 		Main_Data::game_ineluki->ExecuteScriptList(FileFinder::Game().FindFile("autorun.script"));
 	}
+
+	if (Player::IsPatchDestiny()) {
+		Main_Data::game_destiny->Load();
+	}
+}
+
+void Player::UpdateTitle(std::string new_game_title) {
+	if (!game_title.empty() && game_title != new_game_title) {
+		if (game_title_original == new_game_title) {
+			game_title_original = "";
+		} else {
+			game_title_original = game_title;
+		}
+		game_title = new_game_title;
+	}
+
+	std::stringstream title;
+	if (!game_title.empty()) {
+		Output::Debug("Loading game {}", game_title);
+		title << new_game_title << " - ";
+		Input::AddRecordingData(Input::RecordingData::GameTitle, game_title);
+	} else {
+		Output::Debug("Could not read game title.");
+	}
+	title << GAME_TITLE;
+	DisplayUi->SetTitle(title.str());
 }
 
 bool Player::ChangeResolution(int width, int height) {
@@ -879,7 +908,7 @@ void Player::ResetGameObjects() {
 
 	auto min_var = lcf::Data::system.easyrpg_variable_min_value;
 	if (min_var == 0) {
-		if (Player::IsPatchManiac()) {
+		if ((Player::game_config.patch_maniac.Get() & 1) == 1) {
 			min_var = std::numeric_limits<Game_Variables::Var_t>::min();
 		} else {
 			min_var = Player::IsRPG2k3() ? Game_Variables::min_2k3 : Game_Variables::min_2k;
@@ -887,7 +916,7 @@ void Player::ResetGameObjects() {
 	}
 	auto max_var = lcf::Data::system.easyrpg_variable_max_value;
 	if (max_var == 0) {
-		if (Player::IsPatchManiac()) {
+		if ((Player::game_config.patch_maniac.Get() & 1) == 1) {
 			max_var = std::numeric_limits<Game_Variables::Var_t>::max();
 		} else {
 			max_var = Player::IsRPG2k3() ? Game_Variables::max_2k3 : Game_Variables::max_2k;
@@ -916,9 +945,9 @@ void Player::ResetGameObjects() {
 	Main_Data::game_quit = std::make_unique<Game_Quit>();
 	Main_Data::game_switches_global = std::make_unique<Game_Switches>();
 	Main_Data::game_variables_global = std::make_unique<Game_Variables>(min_var, max_var);
+	Main_Data::game_dynrpg = std::make_unique<Game_DynRpg>();
 	Main_Data::game_ineluki = std::make_unique<Game_Ineluki>();
-
-	DynRpg::Reset();
+	Main_Data::game_destiny = std::make_unique<Game_Destiny>();
 
 	Game_Clock::ResetFrame(Game_Clock::now());
 
@@ -1061,18 +1090,26 @@ void Player::LoadFonts() {
 	// Look for bundled fonts
 	auto gothic = FileFinder::OpenFont("Font");
 	if (gothic) {
-		Font::SetDefault(Font::CreateFtFont(std::move(gothic), 12, false, false), false);
+		auto ft = Font::CreateFtFont(std::move(gothic), 12, false, false);
+		player_config.font1.SetLocked(ft != nullptr);
+		if (ft) {
+			Font::SetDefault(ft, false);
+		}
 	}
 
 	auto mincho = FileFinder::OpenFont("Font2");
 	if (mincho) {
-		Font::SetDefault(Font::CreateFtFont(std::move(mincho), 12, false, false), true);
+		auto ft = Font::CreateFtFont(std::move(mincho), 12, false, false);
+		player_config.font2.SetLocked(ft != nullptr);
+		if (ft) {
+			Font::SetDefault(ft, true);
+		}
 	}
 #endif
 }
 
 static void OnMapSaveFileReady(FileRequestResult*, lcf::rpg::Save save) {
-	auto map = Game_Map::loadMapFile(Main_Data::game_player->GetMapId());
+	auto map = Game_Map::LoadMapFile(Main_Data::game_player->GetMapId());
 	Game_Map::SetupFromSave(
 			std::move(map),
 			std::move(save.map_info),
@@ -1150,7 +1187,6 @@ void Player::LoadSavegame(const std::string& save_name, int save_id) {
 	if (!load_on_map) {
 		Scene::PopUntil(Scene::Title);
 	}
-	Game_Map::Dispose();
 
 	Main_Data::game_switches->SetLowerLimit(lcf::Data::switches.size());
 	Main_Data::game_switches->SetData(std::move(save->system.switches));
@@ -1169,18 +1205,26 @@ void Player::LoadSavegame(const std::string& save_name, int save_id) {
 	int map_id = Main_Data::game_player->GetMapId();
 
 	FileRequestAsync* map = Game_Map::RequestMap(map_id);
-	save_request_id = map->Bind([save=std::move(*save)](auto* request) { OnMapSaveFileReady(request, std::move(save)); });
-	map->SetImportantFile(true);
+	save_request_id = map->Bind(
+		[save=std::move(*save), load_on_map, save_id](auto* request) {
+			Game_Map::Dispose();
+
+			OnMapSaveFileReady(request, std::move(save));
+
+			if (load_on_map) {
+				// Increment frame counter for consistency with a normal savegame load
+				IncFrame();
+				static_cast<Scene_Map*>(Scene::instance.get())->StartFromSave(save_id);
+			}
+		}
+	);
 
 	Main_Data::game_system->ReloadSystemGraphic();
 
 	map->Start();
+	// load_on_map is handled in the async callback
 	if (!load_on_map) {
 		Scene::Push(std::make_shared<Scene_Map>(save_id));
-	} else {
-		// Increment frame counter for consistency with a normal savegame load
-		IncFrame();
-		static_cast<Scene_Map*>(Scene::instance.get())->StartFromSave(save_id);
 	}
 }
 
@@ -1222,7 +1266,6 @@ void Player::SetupPlayerSpawn() {
 
 	FileRequestAsync* request = Game_Map::RequestMap(map_id);
 	map_request_id = request->Bind(&OnMapFileReady);
-	request->SetImportantFile(true);
 	request->Start();
 }
 
@@ -1387,20 +1430,36 @@ Engine options:
                        rpg2k3     - RPG Maker 2003 (v1.00 - v1.04)
                        rpg2k3v105 - RPG Maker 2003 (v1.05 - v1.09a)
                        rpg2k3e    - RPG Maker 2003 (English release, v1.12)
+ --font1 FILE         Font to use for the first font. The system graphic of the
+                      game determines whether font 1 or 2 is used.
+ --font1-size PX      Size of font 1 in pixel. The default is 12.
+ --font2 FILE         Font to use for the second font.
+ --font2-size PX      Size of font 2 in pixel. The default is 12.
+ --font-path PATH     The path in which the settings scene looks for fonts.
+                      The default is config-path/Font.
  --language LANG      Load the game translation in language/LANG folder.
  --load-game-id N     Skip the title scene and load SaveN.lsd (N is padded to
                       two digits).
+ --log-file FILE      Path to the logfile. The Player will write diagnostic
+                      messages to this file.
  --new-game           Skip the title scene and start a new game directly.
  --no-log-color       Disable colors in terminal log.
  --no-rtp             Disable support for the Runtime Package (RTP).
- --patch-anti-lag-switch SWITCH
+ --patch-antilag-switch SWITCH
                       Disables event page refreshing when the switch SWITCH is
                       enabled.
  --patch-common-this  Enable usage of "This Event" in common events in any
                       version of the engine.
+ --patch-direct-menu VAR
+                      Directly access subscreens of the default menu by setting
+                      VAR.
  --patch-dynrpg       Enable support of DynRPG patch by Cherry (very limited).
+ --patch-easyrpg      Enable EasyRPG extensions.
  --patch-key-patch    Enable Key Patch by Ineluki.
- --patch-maniac       Enable Maniac Patch by BingShan.
+ --patch-maniac [N]   Enable Maniac Patch by BingShan. Values for N:
+                       - 1: Enable the patch (default)
+                       - 2: Enable the patch but do not adjust variable ranges
+                            to 32 bit.
  --patch-pic-unlock   Picture movement is not interrupted by messages in any
                       version of the engine.
  --patch-rpg2k3-cmds  Support all RPG Maker 2003 event commands in any version
@@ -1425,9 +1484,6 @@ Video options:
  --fps-limit          In combination with --no-vsync sets a custom frames per
                       second limit. The default is 60 FPS. Use --no-fps-limit
                       to run with unlimited frames per second.
- --fps-render-window  Render the frames per second counter in both fullscreen
-                      and windowed mode.
-                      Disable with --no-fps-render-window.
  --fullscreen         Start in fullscreen mode.
  --game-resolution R  Force a different game resolution. This is experimental
                       and can cause glitches or break games!
@@ -1435,6 +1491,8 @@ Video options:
                        original   - 320x240 (4:3). Recommended
                        widescreen - 416x240 (16:9)
                        ultrawide  - 560x240 (21:9)
+ --pause-focus-lost   Pause the game when the window has no focus.
+                      Disable with --no-pause-focus-lost.
  --scaling S          How the video output is scaled.
                       Options:
                        nearest  - Scale to screen size. Fast, but causes scaling
@@ -1443,6 +1501,10 @@ Video options:
                        bilinear - Like nearest, but applies a bilinear filter to
                                   avoid artifacts.
  --show-fps           Enable display of the frames per second counter.
+                      When in windowed mode it is shown inside the window.
+                      When in fullscreen mode it is shown in the titlebar.
+                      Use --fps-render-window to always show the counter inside
+                      the window.
                       Disable with --no-show-fps.
  --stretch            Ignore the aspect ratio and stretch video output to the
                       entire width of the screen.
@@ -1456,6 +1518,8 @@ Audio options:
  --music-volume V     Set volume of background music to V (0-100).
  --sound-volume V     Set volume of sound effects to V (0-100).
  --soundfont FILE     Soundfont in sf2 format to use when playing MIDI files.
+ --soundfont-path P   The path in which the settings scene looks for soundfonts.
+                      The default is config-path/Soundfont.
 
 Debug options:
  --battle-test N...   Start a battle test.
@@ -1549,4 +1613,3 @@ std::string Player::GetEngineVersion() {
 	if (EngineVersion() > 0) return std::to_string(EngineVersion());
 	return std::string();
 }
-

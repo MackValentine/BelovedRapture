@@ -1,6 +1,6 @@
 ACLOCAL_AMFLAGS = --install -I builds/autoconf/m4
 
-EXTRA_DIST = CMakeLists.txt README.md builds docs resources
+EXTRA_DIST = CMakeLists.txt CMakePresets.json README.md builds docs resources
 MOSTLYCLEANFILES = $(DX_CLEANFILES)
 
 bin_PROGRAMS = easyrpg-player
@@ -51,6 +51,7 @@ libeasyrpg_player_a_SOURCES = \
 	src/bitmap_hslrgb.h \
 	src/cache.cpp \
 	src/cache.h \
+	src/callback.h \
 	src/cmdline_parser.cpp \
 	src/cmdline_parser.h \
 	src/color.h \
@@ -82,8 +83,6 @@ libeasyrpg_player_a_SOURCES = \
 	src/drawable_list.h \
 	src/drawable_mgr.cpp \
 	src/drawable_mgr.h \
-	src/dynrpg.cpp \
-	src/dynrpg.h \
 	src/dynrpg_easyrpg.cpp \
 	src/dynrpg_easyrpg.h \
 	src/dynrpg_textplugin.h \
@@ -103,6 +102,8 @@ libeasyrpg_player_a_SOURCES = \
 	src/fileext_guesser.h \
 	src/filesystem.cpp \
 	src/filesystem.h \
+	src/filesystem_hook.cpp \
+	src/filesystem_hook.h \
 	src/filesystem_lzh.cpp \
 	src/filesystem_lzh.h \
 	src/filesystem_native.cpp \
@@ -141,6 +142,10 @@ libeasyrpg_player_a_SOURCES = \
 	src/game_config.h \
 	src/game_config_game.cpp \
 	src/game_config_game.h \
+	src/game_destiny.cpp \
+	src/game_destiny.h \
+	src/game_dynrpg.cpp \
+	src/game_dynrpg.h \
 	src/game_enemy.cpp \
 	src/game_enemy.h \
 	src/game_enemyparty.cpp \
@@ -157,6 +162,8 @@ libeasyrpg_player_a_SOURCES = \
 	src/game_interpreter_control_variables.h \
 	src/game_interpreter_map.cpp \
 	src/game_interpreter_map.h \
+	src/game_interpreter_shared.cpp \
+	src/game_interpreter_shared.h \
 	src/game_map.cpp \
 	src/game_map.h \
 	src/game_message.cpp \
@@ -211,6 +218,8 @@ libeasyrpg_player_a_SOURCES = \
 	src/input_source.h \
 	src/instrumentation.cpp \
 	src/instrumentation.h \
+	src/json_helper.cpp \
+	src/json_helper.h \
 	src/keys.h \
 	src/main_data.cpp \
 	src/main_data.h \
@@ -278,6 +287,8 @@ libeasyrpg_player_a_SOURCES = \
 	src/scene_gameover.h \
 	src/scene_item.cpp \
 	src/scene_item.h \
+	src/scene_language.cpp \
+	src/scene_language.h \
 	src/scene_load.cpp \
 	src/scene_load.h \
 	src/scene_logo.cpp \
@@ -398,6 +409,8 @@ libeasyrpg_player_a_SOURCES = \
 	src/window_input_settings.h \
 	src/window_item.cpp \
 	src/window_item.h \
+	src/window_interpreter.cpp \
+	src/window_interpreter.h \
 	src/window_keyboard.cpp \
 	src/window_keyboard.h \
 	src/window_menustatus.cpp \
@@ -432,6 +445,8 @@ libeasyrpg_player_a_SOURCES = \
 	src/window_skill.h \
 	src/window_skillstatus.cpp \
 	src/window_skillstatus.h \
+	src/window_stringview.cpp \
+	src/window_stringview.h \
 	src/window_targetstatus.cpp \
 	src/window_targetstatus.h \
 	src/window_teleport.cpp \
@@ -439,11 +454,22 @@ libeasyrpg_player_a_SOURCES = \
 	src/window_varlist.cpp \
 	src/window_varlist.h
 
+SOURCEFILES_SDL3 = \
+	src/platform/sdl/sdl3_ui.cpp \
+	src/platform/sdl/sdl3_ui.h \
+	src/platform/sdl/sdl3_audio.cpp \
+	src/platform/sdl/sdl3_audio.h
+if HAVE_SDL3
+libeasyrpg_player_a_SOURCES += $(SOURCEFILES_SDL3)
+else
+EXTRA_DIST += $(SOURCEFILES_SDL3)
+endif
+
 SOURCEFILES_SDL2 = \
 	src/platform/sdl/sdl2_ui.cpp \
 	src/platform/sdl/sdl2_ui.h \
-	src/platform/sdl/sdl_audio.cpp \
-	src/platform/sdl/sdl_audio.h
+	src/platform/sdl/sdl2_audio.cpp \
+	src/platform/sdl/sdl2_audio.h
 if HAVE_SDL2
 libeasyrpg_player_a_SOURCES += $(SOURCEFILES_SDL2)
 else
@@ -513,16 +539,15 @@ EXTRA_DIST += \
 	bench/text.cpp \
 	bench/utils.cpp \
 	bench/variables.cpp \
-	src/external/picojson.h \
 	src/platform/3ds/audio.cpp \
 	src/platform/3ds/audio.h \
-	src/platform/3ds/clock.cpp \
 	src/platform/3ds/clock.h \
 	src/platform/3ds/input_buttons.cpp \
 	src/platform/3ds/main.cpp \
 	src/platform/3ds/ui.cpp \
 	src/platform/3ds/ui.h \
 	src/platform/amigaos4/cmath \
+	src/platform/android/android.cpp \
 	src/platform/android/android.h \
 	src/platform/android/filesystem_apk.cpp \
 	src/platform/android/filesystem_apk.h \
@@ -548,7 +573,6 @@ EXTRA_DIST += \
 	src/platform/psp/psp_input_buttons.cpp \
 	src/platform/psvita/audio.cpp \
 	src/platform/psvita/audio.h \
-	src/platform/psvita/clock.cpp \
 	src/platform/psvita/clock.h \
 	src/platform/psvita/input_buttons.cpp \
 	src/platform/psvita/main.cpp \
@@ -556,16 +580,19 @@ EXTRA_DIST += \
 	src/platform/psvita/ui.h \
 	src/platform/switch/audio.cpp \
 	src/platform/switch/audio.h \
-	src/platform/switch/clock.cpp \
 	src/platform/switch/clock.h \
 	src/platform/switch/input_buttons.cpp \
 	src/platform/switch/main.cpp \
 	src/platform/switch/ui.cpp \
 	src/platform/switch/ui.h \
-	src/platform/wii/clock.cpp \
+	src/platform/wii/audio.cpp \
+	src/platform/wii/audio.h \
 	src/platform/wii/clock.h \
 	src/platform/wii/input_buttons.cpp \
 	src/platform/wii/main.cpp \
+	src/platform/wiiu/input_buttons.cpp \
+	src/platform/wiiu/main.cpp \
+	src/platform/wiiu/main.h \
 	src/platform/windows/midiout_device_win32.cpp \
 	src/platform/windows/midiout_device_win32.h \
 	src/platform/windows/utils.cpp \
@@ -579,6 +606,7 @@ libeasyrpg_player_a_CXXFLAGS = \
 	$(FREETYPE_CFLAGS) \
 	$(HARFBUZZ_CFLAGS) \
 	$(LHASA_CFLAGS) \
+	$(NLOHMANN_JSON_CFLAGS) \
 	$(SDL_CFLAGS) \
 	$(PNG_CFLAGS) \
 	$(ZLIB_CFLAGS) \
@@ -632,6 +660,7 @@ easyrpg_player_LDADD = libeasyrpg-player.a libplayer-version.a \
 	$(FREETYPE_LIBS) \
 	$(HARFBUZZ_LIBS) \
 	$(LHASA_LIBS) \
+	$(NLOHMANN_JSON_LIBS) \
 	$(SDL_LIBS) \
 	$(PNG_LIBS) \
 	$(ZLIB_LIBS) \
@@ -727,11 +756,13 @@ test_runner_SOURCES = \
 	tests/game_character_flash.cpp \
 	tests/game_character_move.cpp \
 	tests/game_character_moveto.cpp \
+	tests/game_destiny.cpp \
 	tests/game_enemy.cpp \
 	tests/game_event.cpp \
 	tests/game_player_input.cpp \
 	tests/game_player_pan.cpp \
 	tests/game_player_savecount.cpp \
+	tests/json.cpp \
 	tests/mock_game.cpp \
 	tests/mock_game.h \
 	tests/move_route.cpp \

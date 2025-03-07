@@ -60,6 +60,13 @@ public:
 	void KillCE();
 
 	/**
+	 * Gets common event ID.
+	 *
+	 * @return ID of the common event
+	 */
+	 int GetId() const;
+
+	/**
 	 * Gets common event index.
 	 *
 	 * @return common event index in list.
@@ -125,6 +132,9 @@ private:
 	/** Interpreter for parallel common events. */
 	std::unique_ptr<Game_Interpreter_Map> interpreter;
 	std::unique_ptr<Game_Interpreter_Battle> interpreter_pp;
+
+
+	friend class Scene_Debug;
 };
 
 #endif

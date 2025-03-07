@@ -20,6 +20,7 @@
 
 // Headers
 #include "system.h"
+#include "bitmap.h"
 #include "drawable.h"
 #include "rect.h"
 
@@ -34,7 +35,7 @@ public:
 
 	virtual void Update();
 	BitmapRef const& GetWindowskin() const;
-	void SetWindowskin(BitmapRef const& nwindowskin);
+	void SetWindowskin(BitmapRef const& nwindowskin, bool transparent = false);
 	BitmapRef GetContents() const;
 	void SetContents(BitmapRef const& ncontents);
 	bool GetStretch() const;
@@ -53,6 +54,8 @@ public:
 	void SetLeftArrow(bool nleft_arrow);
 	bool GetRightArrow() const;
 	void SetRightArrow(bool nright_arrow);
+	bool GetAnimateArrows() const;
+	void SetAnimateArrows(bool nanimate_arrows);
 	int GetX() const;
 	void SetX(int nx);
 	int GetY() const;
@@ -61,6 +64,8 @@ public:
 	void SetWidth(int nwidth);
 	int GetHeight() const;
 	void SetHeight(int nheight);
+	int GetRightX() const;
+	int GetBottomY() const;
 	int GetOx() const;
 	void SetOx(int nox);
 	int GetOy() const;
@@ -80,6 +85,9 @@ public:
 	void SetOpenAnimation(int frames);
 	void SetCloseAnimation(int frames);
 
+	FontRef GetFont() const;
+	void SetFont(FontRef font);
+
 	bool IsOpening() const;
 	bool IsClosing() const;
 	bool IsOpeningOrClosing() const;
@@ -88,6 +96,7 @@ protected:
 	virtual bool IsSystemGraphicUpdateAllowed() const;
 
 	unsigned long ID;
+	FontRef font;
 	BitmapRef windowskin, contents;
 	bool stretch = true;
 	Rect cursor_rect;
@@ -97,6 +106,7 @@ protected:
 	bool down_arrow = false;
 	bool left_arrow = false;
 	bool right_arrow = false;
+	bool animate_arrows = false;
 	int x = 0;
 	int y = 0;
 	int width = 0;
@@ -119,13 +129,14 @@ private:
 	void RefreshFrame();
 	void RefreshCursor();
 
+	bool background_alpha = false;
 	bool background_needs_refresh;
 	bool frame_needs_refresh;
 	bool cursor_needs_refresh;
 	bool pause = false;
 
 	int cursor_frame = 0;
-	int pause_frame = 0;
+	int arrow_animation_frame = 0;
 	int animation_frames = 0;
 	double animation_count = 0.0;
 	double animation_increment = 0.0;
@@ -153,6 +164,7 @@ inline BitmapRef Window::GetContents() const {
 
 inline void Window::SetContents(BitmapRef const& ncontents) {
 	contents = ncontents;
+	contents->SetFont(font);
 }
 
 inline bool Window::GetStretch() const {
@@ -177,7 +189,7 @@ inline bool Window::GetPause() const {
 
 inline void Window::SetPause(bool npause) {
 	pause = npause;
-	pause_frame = 0;
+	arrow_animation_frame = 0;
 }
 
 inline bool Window::GetUpArrow() const {
@@ -212,6 +224,14 @@ inline void Window::SetRightArrow(bool nright_arrow) {
 	right_arrow = nright_arrow;
 }
 
+inline bool Window::GetAnimateArrows() const {
+	return animate_arrows;
+}
+
+inline void Window::SetAnimateArrows(bool nanimate_arrows) {
+	animate_arrows = nanimate_arrows;
+}
+
 inline int Window::GetX() const {
 	return x;
 }
@@ -234,6 +254,14 @@ inline int Window::GetWidth() const {
 
 inline int Window::GetHeight() const {
 	return height;
+}
+
+inline int Window::GetRightX() const {
+	return x + width;
+}
+
+inline int Window::GetBottomY() const {
+	return y + height;
 }
 
 inline int Window::GetOx() const {
@@ -302,6 +330,17 @@ inline void Window::SetContentsOpacity(int ncontents_opacity) {
 
 inline bool Window::IsSystemGraphicUpdateAllowed() const {
 	return !IsClosing();
+}
+
+inline FontRef Window::GetFont() const {
+	return font;
+}
+
+inline void Window::SetFont(FontRef font) {
+	this->font = font;
+	if (contents) {
+		contents->SetFont(font);
+	}
 }
 
 #endif

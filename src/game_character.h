@@ -45,10 +45,10 @@ public:
 
 	static StringView TypeToStr(Type t);
 
-	/**
-	 * Destructor.
-	 */
-	virtual ~Game_Character();
+	virtual ~Game_Character() = default;
+	Game_Character(Game_Character&&) = default;
+	Game_Character& operator=(const Game_Character&) = default;
+	Game_Character& operator=(Game_Character&&) = default;
 
 	/** @return the type of character this is */
 	Type GetType() const;
@@ -241,6 +241,18 @@ public:
 	 * @param finished true: forced move route finished, false: not finished
 	 */
 	void SetMoveRouteFinished(bool finished);
+
+	/**
+	 * @return How often the current move action failed.
+	 */
+	int GetMoveFailureCount() const;
+
+	/**
+	 * Sets how often the current move action failed.
+	 *
+	 * @param count amount
+	 */
+	void SetMoveFailureCount(int count);
 
 	/**
 	 * Gets sprite name. Usually the name of the graphic file.
@@ -627,11 +639,17 @@ public:
 	 */
 	void Turn90DegreeLeftOrRight();
 
-	/** @return the direction we would need to face the hero. */
-	int GetDirectionToHero();
+	/**
+	 * @param target Target character
+	 * @return the direction we would need to face the target
+	 */
+	int GetDirectionToCharacter(const Game_Character& target);
 
-	/** @return the direction we would need to face away from hero. */
-	int GetDirectionAwayHero();
+	/**
+	 * @param target Target character
+	 * @return the direction we would need to face away from the target.
+	 */
+	int GetDirectionAwayCharacter(const Game_Character& target);
 
 	/**
 	 * @param dir input direction
@@ -660,14 +678,14 @@ public:
 	void TurnRandom();
 
 	/**
-	 * Character looks towards the hero.
+	 * @param target character looks towards this target.
 	 */
-	void TurnTowardHero();
+	void TurnTowardCharacter(const Game_Character& target);
 
 	/**
-	 * Character looks away from the hero.
+	 * @param target character looks away from this target.
 	 */
-	void TurnAwayFromHero();
+	void TurnAwayFromCharacter(const Game_Character& target);
 
 	/**
 	 * Character waits for 20 frames more.
@@ -693,27 +711,26 @@ public:
 	/**
 	 * Gets sprite x coordinate transformed to screen coordinate in pixels.
 	 *
-	 * @param apply_shift When true the coordinate is shifted by the map width (for looping maps)
 	 * @return screen x coordinate in pixels.
 	 */
-	virtual int GetScreenX(bool apply_shift = false) const;
+	virtual int GetScreenX() const;
 
 	/**
 	 * Gets sprite y coordinate transformed to screen coordinate in pixels.
 	 *
-	 * @param apply_shift When true the coordinate is shifted by the map height (for looping maps)
 	 * @param apply_jump Apply jump height modifier if character is jumping
 	 * @return screen y coordinate in pixels.
 	 */
-	virtual int GetScreenY(bool apply_shift = false, bool apply_jump = true) const;
+	virtual int GetScreenY(bool apply_jump = true) const;
 
 	/**
 	 * Gets screen z coordinate
 	 *
-	 * @param apply_shift Forwarded to GetScreenY
+	 * @param x_offset Offset to apply to the X coordinate
+	 * @param y_offset Offset to apply to the Y coordinate
 	 * @return screen z coordinate
 	 */
-	virtual Drawable::Z_t GetScreenZ(bool apply_shift = false) const;
+	virtual Drawable::Z_t GetScreenZ(int x_offset, int y_offset) const;
 
 	/**
 	 * Gets tile graphic ID.
@@ -764,8 +781,17 @@ public:
 	 */
 	void SetAnimationType(AnimType anim_type);
 
-	int DistanceXfromPlayer() const;
-	int DistanceYfromPlayer() const;
+	/**
+	 * @param target Target to calculate distance of
+	 * @return X distance to target
+	 */
+	int GetDistanceXfromCharacter(const Game_Character& target) const;
+
+	/**
+	 * @param target Target to calculate distance of
+	 * @return Y distance to target
+	 */
+	int GetDistanceYfromCharacter(const Game_Character& target) const;
 
 	/**
 	 * Tests if the character is currently on the tile at x/y or moving
@@ -878,6 +904,7 @@ public:
 	static int ReverseDir(int dir);
 
 	static Game_Character* GetCharacter(int character_id, int event_id);
+	static Game_Character& GetPlayer();
 
 	static constexpr int GetDxFromDirection(int dir);
 	static constexpr int GetDyFromDirection(int dir);
@@ -1058,6 +1085,14 @@ inline bool Game_Character::IsMoveRouteFinished() const {
 
 inline void Game_Character::SetMoveRouteFinished(bool finished) {
 	data()->move_route_finished = finished;
+}
+
+inline int Game_Character::GetMoveFailureCount() const {
+	return data()->easyrpg_move_failure_count;
+}
+
+inline void Game_Character::SetMoveFailureCount(int count) {
+	data()->easyrpg_move_failure_count = count;
 }
 
 inline const std::string& Game_Character::GetSpriteName() const {
@@ -1344,7 +1379,9 @@ inline Game_CharacterDataStorage<T>::Game_CharacterDataStorage(Game_CharacterDat
 template <typename T>
 inline Game_CharacterDataStorage<T>& Game_CharacterDataStorage<T>::operator=(Game_CharacterDataStorage&& o) noexcept
 {
-	static_cast<Game_Character*>(this) = std::move(o);
+	auto* base = static_cast<Game_Character*>(this);
+	*base = std::move(o);
+
 	if (this != &o) {
 		_data = std::move(o._data);
 		Game_Character::_data = &this->_data;

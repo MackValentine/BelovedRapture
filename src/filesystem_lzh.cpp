@@ -30,7 +30,7 @@
 #include <iostream>
 #include <sstream>
 #include <algorithm>
-#include <fmt/core.h>
+#include <fmt/format.h>
 
 #include "lhasa.h"
 
@@ -98,6 +98,15 @@ LzhFilesystem::LzhFilesystem(std::string base_path, FilesystemView parent_fs, St
 
 	// Compressed data offset is manually calculated to reduce calls to tellg()
 	auto last_offset = is.tellg();
+
+	// Read one file, when it fails consider it not an Lzh archive
+	if (lha_reader_next_file(lha_reader.get()) == nullptr) {
+		Output::Debug("LzhFS: {} is not a valid archive", GetPath());
+		return;
+	}
+
+	is.clear();
+	is.seekg(last_offset);
 
 	// Guess the encoding
 	if (encoding.empty()) {

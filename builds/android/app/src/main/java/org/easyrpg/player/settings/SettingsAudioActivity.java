@@ -7,7 +7,6 @@ import android.os.Bundle;
 import android.provider.DocumentsContract;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
@@ -15,16 +14,16 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.AppCompatSpinner;
 import androidx.documentfile.provider.DocumentFile;
 
+import org.easyrpg.player.BaseActivity;
 import org.easyrpg.player.Helper;
 import org.easyrpg.player.R;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class SettingsAudioActivity extends AppCompatActivity {
+public class SettingsAudioActivity extends BaseActivity {
     private LinearLayout soundfontsListLayout;
     List<SoundfontItemList> soundfontList;
 
@@ -35,26 +34,10 @@ public class SettingsAudioActivity extends AppCompatActivity {
 
         soundfontsListLayout = findViewById(R.id.settings_sound_fonts_list);
 
-        SettingsManager.init(getApplicationContext());
-
         // Setup UI components
         // The Soundfont Button
         Button button = this.findViewById(R.id.button_open_soundfont_folder);
-        // We can open the file picker in a specific folder only with API >= 26
-        if (android.os.Build.VERSION.SDK_INT >= 26) {
-            button.setOnClickListener(v -> {
-                // Open the file explorer in the "soundfont" folder
-                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-                intent.setType("*/*");
-                intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, SettingsManager.getSoundFontsFolderURI(this));
-                startActivity(intent);
-            });
-        } else {
-            ViewGroup layout = (ViewGroup) button.getParent();
-            if(layout != null) {
-                layout.removeView(button);
-            }
-        }
+        Helper.attachOpenFolderButton(this, button, SettingsManager.getSoundFontsFolderURI(this));
 
         configureMusicVolume();
         configureSoundVolume();
@@ -90,14 +73,14 @@ public class SettingsAudioActivity extends AppCompatActivity {
 
         Uri soundFontsFolder = SettingsManager.getSoundFontsFolderURI(this);
         if (soundFontsFolder != null) {
-            for (String[] array : Helper.listChildrenDocumentIDAndType(this, soundFontsFolder)) {
+            for (String[] array : Helper.listChildrenDocuments(this, soundFontsFolder)) {
                 String fileDocumentID = array[0];
                 String fileDocumentType = array[1];
+                String name = array[2];
 
                 // Is it a soundfont file ?
                 boolean isDirectory = Helper.isDirectoryFromMimeType(fileDocumentType);
-                String name = Helper.getFileNameFromDocumentID(fileDocumentID);
-                if (!isDirectory && name.toLowerCase().endsWith(".sf2")) {
+                if (!isDirectory && (name.toLowerCase().endsWith(".sf2") || name.toLowerCase().endsWith(".soundfont"))) {
                     DocumentFile soundFontFile = Helper.getFileFromDocumentID(this, soundFontsFolder, fileDocumentID);
                     if (soundFontFile != null) {
                         soundfontList.add(new SoundfontItemList(this, name, soundFontFile.getUri()));
@@ -113,7 +96,7 @@ public class SettingsAudioActivity extends AppCompatActivity {
     }
 
     public static boolean isSelectedSoundfontFile(Context context, Uri soundfontUri) {
-        Uri selectedSoundFontUri = SettingsManager.getSoundFountFileURI(context);
+        Uri selectedSoundFontUri = SettingsManager.getSoundFontFileURI();
         if (soundfontUri == null && selectedSoundFontUri == null) {
             return true;
         }
@@ -147,7 +130,7 @@ public class SettingsAudioActivity extends AppCompatActivity {
         }
 
         public void select() {
-            SettingsManager.setSoundFountFileURI(uri);
+            SettingsManager.setSoundFontFileURI(uri);
 
             // Uncheck other RadioButton
             for (SoundfontItemList s : soundfontList) {

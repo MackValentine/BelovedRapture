@@ -22,7 +22,9 @@
 #include "utils.h"
 #include "output.h"
 
-#ifdef USE_SDL // This is needed on Windows, SDL wraps main()
+#if USE_SDL == 3 // This is needed on Windows, SDL wraps main()
+#  include <SDL3/SDL.h>
+#elif USE_SDL <= 2
 #  include <SDL.h>
 #endif
 #ifdef _WIN32
@@ -30,17 +32,15 @@
 #  include <shellapi.h>
 #elif defined(__ANDROID__)
 #  include <android/log.h>
-#elif defined(__WIIU__)
-#  include <coreinit/debug.h>
+#  include "platform/android/android.h"
 #endif
 
-#if defined(__ANDROID__) || defined(__WIIU__)
+#ifdef __ANDROID__
 static void LogCallback(LogLevel lvl, std::string const& msg, LogCallbackUserData /* userdata */) {
-#  if defined(__ANDROID__)
-#    ifdef NDEBUG
+#  ifdef NDEBUG
 	// docs say debugging logs should be disabled for release builds
 	if (lvl == LogLevel::Debug || lvl == LogLevel::Info) return;
-#    endif
+#  endif
 
 	int prio = (lvl == LogLevel::Error) ? ANDROID_LOG_ERROR :
 		(lvl == LogLevel::Warning) ? ANDROID_LOG_WARN :
@@ -48,12 +48,6 @@ static void LogCallback(LogLevel lvl, std::string const& msg, LogCallbackUserDat
 		ANDROID_LOG_INFO;
 
 	__android_log_write(prio, GAME_TITLE, msg.c_str());
-#  elif defined(__WIIU__)
-	std::string m = std::string("[" GAME_TITLE "] ") +
-		Output::LogLevelToString(lvl) + ": " + msg;
-
-	OSReport("%s\n", m.c_str());
-#  endif
 }
 #endif
 
@@ -79,12 +73,17 @@ extern "C" int main(int argc, char* argv[]) {
 	args.assign(argv, argv + argc);
 #endif
 
-#if defined(__WIIU__) || defined(__ANDROID__)
+#ifdef __ANDROID__
 	Output::SetLogCallback(LogCallback);
+#endif
+
+#if defined(__ANDROID__)
+	EpAndroid::env = (JNIEnv*)SDL_AndroidGetJNIEnv();
 #endif
 
 	Player::Init(std::move(args));
 	Player::Run();
 
-	return EXIT_SUCCESS;
+	// Close
+	return Player::exit_code;
 }
