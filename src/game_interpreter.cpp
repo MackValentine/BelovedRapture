@@ -807,17 +807,6 @@ bool Game_Interpreter::ExecuteCommand(lcf::rpg::EventCommand const& com) {
 			return CommandCanUseItem(com);
 		case 2057:
 			return CommandUseItem(com);
-			return CmdSetup<&Game_Interpreter::CommandManiacCallCommand, 6>(com);
-		case Cmd::Maniac_GetGameInfo:
-			return CmdSetup<&Game_Interpreter::CommandManiacGetGameInfo, 8>(com);
-		case Cmd::EasyRpg_SetInterpreterFlag:
-			return CmdSetup<&Game_Interpreter::CommandEasyRpgSetInterpreterFlag, 2>(com);
-		case Cmd::EasyRpg_ProcessJson:
-			return CmdSetup<&Game_Interpreter::CommandEasyRpgProcessJson, 8>(com);
-		case Cmd::EasyRpg_CloneMapEvent:
-			return CmdSetup<&Game_Interpreter::CommandEasyRpgCloneMapEvent, 10>(com);
-		case Cmd::EasyRpg_DestroyMapEvent:
-			return CmdSetup<&Game_Interpreter::CommandEasyRpgDestroyMapEvent, 2>(com);
 		default:
 			return true;
 	}
@@ -1720,78 +1709,6 @@ bool Game_Interpreter::CommandChangeLevel(lcf::rpg::EventCommand const& com) { /
 		ForegroundTextPush(std::move(pm));
 	}
 	return true;
-}
-
-int Game_Interpreter::ValueOrVariable(int mode, int val) {
-	if (mode == 0) {
-		return val;
-	} else if (mode == 1) {
-		return Main_Data::game_variables->Get(val);
-	} else if (Player::IsPatchManiac()) {
-		// Maniac Patch does not implement all modes for all commands
-		// For simplicity it is enabled for all here
-		if (mode == 2) {
-			// Variable indirect
-			return Main_Data::game_variables->GetIndirect(val);
-		} else if (mode == 3) {
-			// Switch (F = 0, T = 1)
-			return Main_Data::game_switches->GetInt(val);
-		} else if (mode == 4) {
-			// Switch through Variable (F = 0, T = 1)
-			return Main_Data::game_switches->GetInt(Main_Data::game_variables->Get(val));
-		}
-	}
-	return -1;
-}
-
-int Game_Interpreter::ValueOrVariableBitfield(int mode, int shift, int val) {
-	return ValueOrVariable((mode & (0xF << shift * 4)) >> shift * 4, val);
-}
-
-int Game_Interpreter::ValueOrVariableBitfield(lcf::rpg::EventCommand const& com, int mode_idx, int shift, int val_idx) {
-//	assert(com.parameters.size() > val_idx);
-
-	if (!Player::IsPatchManiac()) {
-		return com.parameters[val_idx];
-	}
-
-	assert(mode_idx != val_idx);
-
-	if (com.parameters.size() > std::max(mode_idx, val_idx)) {
-		int mode = com.parameters[mode_idx];
-		return ValueOrVariableBitfield(com.parameters[mode_idx], shift, com.parameters[val_idx]);
-	}
-
-	return com.parameters[val_idx];
-}
-
-StringView Game_Interpreter::CommandStringOrVariable(lcf::rpg::EventCommand const& com, int mode_idx, int val_idx) {
-	if (!Player::IsPatchManiac()) {
-		return com.string;
-	}
-
-	assert(mode_idx != val_idx);
-
-	if (com.parameters.size() > std::max(mode_idx, val_idx)) {
-		return Main_Data::game_strings->GetWithMode(ToString(com.string), com.parameters[mode_idx], com.parameters[val_idx], *Main_Data::game_variables);
-	}
-
-	return com.string;
-}
-
-StringView Game_Interpreter::CommandStringOrVariableBitfield(lcf::rpg::EventCommand const& com, int mode_idx, int shift, int val_idx) {
-	if (!Player::IsPatchManiac()) {
-		return com.string;
-	}
-
-	assert(mode_idx != val_idx);
-
-	if (com.parameters.size() >= std::max(mode_idx, val_idx) + 1) {
-		int mode = com.parameters[mode_idx];
-		return Main_Data::game_strings->GetWithMode(ToString(com.string), (mode & (0xF << shift * 4)) >> shift * 4, com.parameters[val_idx], *Main_Data::game_variables);
-	}
-
-	return com.string;
 }
 
 bool Game_Interpreter::CommandChangeParameters(lcf::rpg::EventCommand const& com) { // Code 10430
@@ -3180,7 +3097,8 @@ bool Game_Interpreter::CommandMoveEvent(lcf::rpg::EventCommand const& com) { // 
 		route.skippable = com.parameters[3] != 0;
 
 		for (auto it = com.parameters.begin() + 4; it < com.parameters.end(); ) {
-			route.move_commands.push_back(DecodeMove(it));
+			auto t = Game_Interpreter_Shared::DecodeMove(it);
+			route.move_commands.push_back(t);
 		}
 
 		event->ForceMoveRoute(route, move_freq);
@@ -3572,9 +3490,9 @@ bool Game_Interpreter::CommandConditionalBranch(lcf::rpg::EventCommand const& co
 			actor_id = Main_Data::game_variables->Get(actor_id);
 
 
-		if (Player::IsPatchManiac()) {
-			actor_id = ValueOrVariable(com.parameters[4], actor_id);
-		}
+		//if (Player::IsPatchManiac()) {
+		//	actor_id = ValueOrVariable(com.parameters[4], actor_id);
+		//}
 		
 		actor = Main_Data::game_actors->GetActor(actor_id);
 

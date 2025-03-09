@@ -87,7 +87,7 @@ AsyncOp Game_CommonEvent::Update(bool resume_async) {
 void Game_CommonEvent::KillCE() {
 	if (interpreter_pp) {
 		interpreter_pp->Clear();
-		interpreter_pp.reset(new Game_Interpreter_Battle());
+		interpreter_pp.reset(new Game_Interpreter_Battle(true));
 	}
 }
 

@@ -162,12 +162,14 @@ int Game_Strings::Split(Str_Params params, const std::string& delimiter, int str
 			params.string_id++;
 			components++;
 		}
-	} else {
+	}
+	else {
 		components = 1;
 
 		if (str.find(delimiter) == std::string::npos) {
 			// token not found
-		} else {
+		}
+		else {
 			// This works for UTF-8
 			std::string token;
 			for (auto index = str.find(delimiter); index != std::string::npos; index = str.find(delimiter)) {
@@ -177,7 +179,6 @@ int Game_Strings::Split(Str_Params params, const std::string& delimiter, int str
 				components++;
 				str.erase(0, index + delimiter.length());
 			}
-			splits++;
 		}
 	}
 
